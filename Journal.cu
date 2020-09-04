@@ -1,3 +1,5 @@
+//!매치 정보는 순위동형이 발생하는 텍스트에서의 위치만 전달한다!
+
 //더 효율적으로 짤수 있지만 병렬화 전의 논문과의 비교를 위해 다른 인자는 통일해야 한다고 생각, 효율화 하지 않음
 //검색단계만 병렬적으로 효율화를 함
 //하지만 기존의 preprocessing_phi()는 너무 비효율적으로 작동하여 수정함, 대응되는게 MakeTempLoc()
@@ -17,7 +19,7 @@
 //Merge Sort에서 사용하는 값. 패턴의 길이를 넘어가지 않음
 #define MAX_COUNT 1'000
 #define ThreadCount 1'024
-#define CopySize 50'000'000
+#define CopySize 1'000'000
 using namespace std;
 
 typedef pair<int,int> P;
@@ -281,7 +283,7 @@ __device__ bool CheckOP(int Text[], int* E, int StartIdx, int PatternLen, int Pa
 
 
 __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes,
-	 int TextLen, int PatternCount, int PatternLen,int BlockSize,int * DevMatchDetail){
+	 int TextLen, int PatternCount, int PatternLen,int BlockSize,bool * DevMatchDetail){
 
 	extern __shared__ int sharedText[]; //dynamic allocation
 	int bidx = blockIdx.x;
@@ -301,19 +303,7 @@ __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes
 		for(int i=0; i < CurTextLen-PatternLen; i++){
 			int temp = DevCalQgram(sharedText, i+PatternLen-BlockSize, PatternLen, BlockSize);
 			
-			if(temp == DevHash[tidx]){// && tidx == 27 , 49187
-				/*if(i+ThreadCount * blockIdx.x == 49151){
-				for(int tmp=i;tmp<i+PatternLen;tmp++){
-					printf("%d ",sharedText[tmp]);
-				}
-				printf("\n");
-
-				for(int tmp = 0; tmp<PatternLen;tmp++){
-					int idx = tidx + PatternCount * tmp;
-					printf("%d ",DevLoc[idx]);
-				}
-				printf("\n");
-			}*/
+			if(temp == DevHash[tidx]){
 				if(CheckOP(sharedText, DevE, i,PatternLen, tidx, PatternCount)){
 				//printf("Text idx : %d Pattern idx : %d\n",TextStart+i, tidx);
 				/*for(int tmp=i;tmp<i+PatternLen;tmp++){
@@ -328,9 +318,8 @@ __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes
 				printf("\n");
 				*/
 				//atomicAdd(&DevMatchRes[0], 1);
-				atomicAdd(&DevMatchRes[0], 2);
-				atomicExch(&(DevMatchDetail[DevMatchRes[0] - 2]), TextStart+i);
-				atomicExch(&(DevMatchDetail[DevMatchRes[0] - 1]), tidx);
+				atomicAdd(&DevMatchRes[0], 1);
+				DevMatchDetail[TextStart+i] = true;
 				}
 			}
 		}
@@ -349,7 +338,7 @@ extern "C" void InitLocGpu(int * Loc,int PatternCount, int PatternLen)
 }*/
 
 void FreeVariable(int * DevMatchRes,int * DevHash,int * DevText, int *DevE,
-	int * Text, int **Pattern,int * Loc,int * Hash,int * E, int PatternCount,int * MatchRes, int *MatchResDetail, int * DevMatchDetail){
+	int * Text, int **Pattern,int * Loc,int * Hash,int * E, int PatternCount,int * MatchRes, bool *MatchResDetail, bool * DevMatchDetail){
 	
 	for(int i=0;i<PatternCount;i++){
 		delete[] Pattern[i];
@@ -378,16 +367,16 @@ int main(){
 	int * Hash;
 	int * Text;
 	int * MatchRes;
-	int * MatchResDetail;
+	bool * MatchResDetail;
 
 	//GPU variables
 	int * DevMatchRes;
 	int * DevHash;
 	int * DevText;
 	int * DevE;
-	int * DevMatchDetail;
+	bool * DevMatchDetail;
 
-	for(int FolderNumber = 0;FolderNumber <=5;FolderNumber++){
+	for(int FolderNumber = 0;FolderNumber <=3;FolderNumber++){
 	for (int BlockSize = 3; BlockSize <= 3; BlockSize++) {
 		for (int PatternCount = 100; PatternCount <= 1000; PatternCount += 100) { // 100~1000
 			for (int PatternLen = 3; PatternLen <= 15; PatternLen += 1) { //3~15
@@ -404,7 +393,8 @@ int main(){
 					for (int i = 0; i < PatternCount; i++) {
 						Pattern[i] = new int[PatternLen];
 					}
-					MatchResDetail = new int[CopySize];
+					MatchResDetail = new bool[CopySize];
+
 					//Read Text and Pattern
 					InputData(Pattern, Text, PatternCount, PatternLen, TextLen,FolderNumber);
 					//Fill the Location table
@@ -429,13 +419,13 @@ int main(){
 					HANDLE_ERROR(cudaMalloc((void**)&DevHash, sizeof(int) * PatternCount));
 					HANDLE_ERROR(cudaMalloc((void**)&DevText, sizeof(int) * TextLen));
 					HANDLE_ERROR(cudaMalloc((void**)&DevE, sizeof(int) * PatternCount * PatternLen));
-					HANDLE_ERROR(cudaMalloc((void**)&DevMatchDetail, CopySize*sizeof(int)));
+					HANDLE_ERROR(cudaMalloc((void**)&DevMatchDetail, CopySize*sizeof(bool)));
 
 					HANDLE_ERROR(cudaMemcpy(DevHash, Hash, sizeof(int) * PatternCount, cudaMemcpyHostToDevice));
 					HANDLE_ERROR(cudaMemcpy(DevText, Text, sizeof(int) * TextLen, cudaMemcpyHostToDevice));
 					HANDLE_ERROR(cudaMemcpy(DevE, E, sizeof(int) * PatternCount * PatternLen, cudaMemcpyHostToDevice));
 					HANDLE_ERROR(cudaMemset(DevMatchRes, 0, sizeof(int)));
-					HANDLE_ERROR(cudaMemset(DevMatchDetail, 0 ,CopySize*sizeof(int)));
+					HANDLE_ERROR(cudaMemset(DevMatchDetail, 0 ,CopySize*sizeof(bool)));
 
 					//Kernel !3rd parameter is shared memory size in byte. Take care!
 					SearchStart = clock();
@@ -447,7 +437,7 @@ int main(){
 					
 					MatchRes = new int[2];
 					CopyToHostStart = clock();
-					HANDLE_ERROR(cudaMemcpy(MatchResDetail, DevMatchDetail, sizeof(int) * CopySize, cudaMemcpyDeviceToHost));
+					HANDLE_ERROR(cudaMemcpy(MatchResDetail, DevMatchDetail, sizeof(bool) * CopySize, cudaMemcpyDeviceToHost));
 					HANDLE_ERROR(cudaMemcpy(MatchRes, DevMatchRes, sizeof(int), cudaMemcpyDeviceToHost));
 					CopyToHostEnd = clock();
 
