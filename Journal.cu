@@ -19,7 +19,7 @@
 //Merge Sort에서 사용하는 값. 패턴의 길이를 넘어가지 않음
 #define MAX_COUNT 1'000
 #define ThreadCount 1'024
-#define CopySize 1'000'000
+#define CopySize 1'000'005
 using namespace std;
 
 typedef pair<int,int> P;
@@ -430,6 +430,7 @@ int main(){
 					//Kernel !3rd parameter is shared memory size in byte. Take care!
 					SearchStart = clock();
 
+					//블럭개수 늘리기
 					Search<<<(TextLen+(ThreadCount-1)/ThreadCount), ThreadCount, 10000>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
 					cudaDeviceSynchronize();
 
