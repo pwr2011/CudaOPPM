@@ -15,7 +15,6 @@
 #include<fstream>
 #include<cstring>
 
-
 //Merge Sort에서 사용하는 값. 패턴의 길이를 넘어가지 않음
 #define MAX_COUNT 1'000
 #define ThreadCount 1'024
