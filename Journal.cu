@@ -28,11 +28,18 @@ __constant__ int DevLoc[16'000]; //MAX
 
 //Input Folder Name
 string InputFolder = "./TESTCASE/TC-";
-string OutputFolder = "./OUTPUT/TC-";
-string TimeFolder = "./TIME/";
+string OutputFolder = "./JournalOUTPUT/TC-";
+string TimeFolder = "./JournalTIME/TC-";
 string TextInput = "TextSample";
 string PatternInput = "IntStr";
 string TimeInput = "TimeRecord_";
+
+clock_t Pre1Start;
+clock_t Pre1End;
+clock_t Pre2Start;
+clock_t Pre2End;
+clock_t CopyToDeviceStart;
+clock_t CopyToDeviceEnd;
 clock_t CopyToHostStart;
 clock_t CopyToHostEnd;
 clock_t SearchStart;
@@ -63,12 +70,26 @@ void InputData(int ** Pattern, int * Text, int PatternCount, int PatternLen, int
 	return ;
 }
 
-void OutputData(int PatternCount, int PatternLen, int TextLen, int FolderNumber,int MatchRes){
+void OutputData(int PatternCount, int PatternLen, int TextLen, int FolderNumber,int MatchRes, bool * MatchResDetail){
 	string FileName = OutputFolder+ to_string(FolderNumber)+"/"+PatternInput + "_" +
 	 to_string(PatternCount) + "_" +to_string(PatternLen) +"_"+to_string(TextLen) + ".txt";
 	 
 	ofstream FileStream(FileName);
 	FileStream<<MatchRes;
+	FileStream<<"\n";
+	for(int t=0;t<TextLen; t++){
+		FileStream<<MatchResDetail[t]<<" ";
+	}
+	FileStream.close();
+}
+
+void OutputTime(double Pre1, double Pre2, double Search, double Total,double CopyToHost, double CopyToDevice, int PatternCount,int PatternLen, int TextLen, int FolderNumber ){
+	string FileName = TimeFolder + to_string(FolderNumber) + "/" + PatternInput + "_" +
+					  to_string(PatternCount) + "_" + to_string(PatternLen) + "_" + to_string(TextLen) + ".txt";
+
+	ofstream FileStream(FileName);
+	FileStream<<(Pre1 / CLOCKS_PER_SEC)<<" "<<(Search/CLOCKS_PER_SEC)<<" "
+	<<(Total/CLOCKS_PER_SEC)<<" "<<(CopyToHost/CLOCKS_PER_SEC)<<" "<<(CopyToDevice/CLOCKS_PER_SEC);
 	FileStream.close();
 }
 
@@ -376,7 +397,7 @@ int main(){
 	int * DevE;
 	bool * DevMatchDetail;
 
-	for(int FolderNumber = 0;FolderNumber <=3;FolderNumber++){
+	for(int FolderNumber = 0;FolderNumber <=2;FolderNumber++){
 	for (int BlockSize = 3; BlockSize <= 3; BlockSize++) {
 		for (int PatternCount = 100; PatternCount <= 1000; PatternCount += 100) { // 100~1000
 			for (int PatternLen = 3; PatternLen <= 15; PatternLen += 1) { //3~15
@@ -393,16 +414,19 @@ int main(){
 					for (int i = 0; i < PatternCount; i++) {
 						Pattern[i] = new int[PatternLen];
 					}
-					MatchResDetail = new bool[CopySize];
+					MatchResDetail = new bool[TextLen];
 
 					//Read Text and Pattern
 					InputData(Pattern, Text, PatternCount, PatternLen, TextLen,FolderNumber);
 					//Fill the Location table
+					Pre1Start = clock();
 					FillLoc(Pattern, Loc, E, PatternCount, PatternLen);
-					
+					Pre1End = clock();
+
 					//Fill the hash table
+					Pre2Start = clock();
 					FillHash(Pattern, BlockSize, PatternCount, PatternLen, Hash);
-					
+					Pre2End = clock();
 
 					/*for(int i=0;i<PatternCount;i++){
 						for(int j=0;j<PatternLen;j++){
@@ -415,21 +439,22 @@ int main(){
 					InitLocGpu(Loc, PatternCount, PatternLen);
 					
 					//GPU init
+					CopyToDeviceStart= clock();
 					HANDLE_ERROR(cudaMalloc((void**)&DevMatchRes, sizeof(int) * 1));
 					HANDLE_ERROR(cudaMalloc((void**)&DevHash, sizeof(int) * PatternCount));
 					HANDLE_ERROR(cudaMalloc((void**)&DevText, sizeof(int) * TextLen));
 					HANDLE_ERROR(cudaMalloc((void**)&DevE, sizeof(int) * PatternCount * PatternLen));
-					HANDLE_ERROR(cudaMalloc((void**)&DevMatchDetail, CopySize*sizeof(bool)));
+					HANDLE_ERROR(cudaMalloc((void**)&DevMatchDetail, TextLen*sizeof(bool)));
 
 					HANDLE_ERROR(cudaMemcpy(DevHash, Hash, sizeof(int) * PatternCount, cudaMemcpyHostToDevice));
 					HANDLE_ERROR(cudaMemcpy(DevText, Text, sizeof(int) * TextLen, cudaMemcpyHostToDevice));
 					HANDLE_ERROR(cudaMemcpy(DevE, E, sizeof(int) * PatternCount * PatternLen, cudaMemcpyHostToDevice));
 					HANDLE_ERROR(cudaMemset(DevMatchRes, 0, sizeof(int)));
-					HANDLE_ERROR(cudaMemset(DevMatchDetail, 0 ,CopySize*sizeof(bool)));
-
+					HANDLE_ERROR(cudaMemset(DevMatchDetail, 0 ,TextLen*sizeof(bool)));
+					CopyToDeviceEnd= clock();
 					//Kernel !3rd parameter is shared memory size in byte. Take care!
-					SearchStart = clock();
 
+					SearchStart = clock();	
 					//블럭개수 늘리기
 					Search<<<(TextLen+(ThreadCount-1)/ThreadCount), ThreadCount, 10000>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
 					cudaDeviceSynchronize();
@@ -438,19 +463,19 @@ int main(){
 					
 					MatchRes = new int[2];
 					CopyToHostStart = clock();
-					HANDLE_ERROR(cudaMemcpy(MatchResDetail, DevMatchDetail, sizeof(bool) * CopySize, cudaMemcpyDeviceToHost));
+					HANDLE_ERROR(cudaMemcpy(MatchResDetail, DevMatchDetail, sizeof(bool) * TextLen, cudaMemcpyDeviceToHost));
 					HANDLE_ERROR(cudaMemcpy(MatchRes, DevMatchRes, sizeof(int), cudaMemcpyDeviceToHost));
 					CopyToHostEnd = clock();
 
 					PrintTestInfo(PatternCount, PatternLen,TextLen, MatchRes[0]);
-					//OutputData(PatternCount, PatternLen, TextLen, FolderNumber, MatchRes[0]);
+					OutputData(PatternCount, PatternLen, TextLen, FolderNumber, MatchRes[0], MatchResDetail);
 					//Freeing Variable
 					FreeVariable(DevMatchRes, DevHash, DevText,DevE, Text, Pattern, Loc, Hash, E, PatternCount, MatchRes, MatchResDetail, DevMatchDetail);
 					TotalEnd = clock();
-
-					printf("Search Time : %fms\n",(double)(SearchEnd-SearchStart)/CLOCKS_PER_SEC);
+					OutputTime(Pre1End-Pre1Start, Pre2End-Pre2Start, SearchEnd-SearchStart,TotalEnd - TotalStart,CopyToHostEnd- CopyToHostStart, CopyToDeviceEnd- CopyToDeviceStart, PatternCount,PatternLen, TextLen, FolderNumber );
+					/*printf("Search Time : %fms\n",(double)(SearchEnd-SearchStart)/CLOCKS_PER_SEC);
 					printf("Copy Time : %fms\n",(double)(CopyToHostEnd-CopyToHostStart)/CLOCKS_PER_SEC);
-					printf("Total Time : %fms\n",(double)(TotalEnd-TotalStart)/CLOCKS_PER_SEC);
+					printf("Total Time : %fms\n",(double)(TotalEnd-TotalStart)/CLOCKS_PER_SEC);*/
 				}	
 			}
 		}
