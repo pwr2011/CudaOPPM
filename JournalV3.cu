@@ -27,8 +27,8 @@ __constant__ int DevLoc[16'000]; //MAX
 
 //Input Folder Name
 string InputFolder = "./TESTCASE/TC-";
-string OutputFolder = "./JournalV2OUTPUT/TC-";
-string TimeFolder = "./JournalV2TIME/TC-";
+string OutputFolder = "./JournalV3OUTPUT/TC-";
+string TimeFolder = "./JournalV3TIME/TC-";
 string TextInput = "TextSample";
 string PatternInput = "IntStr";
 string TimeInput = "TimeRecord_";
@@ -308,19 +308,18 @@ __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes
 	extern __shared__ int sharedText[]; //dynamic allocation
 	int bidx = blockIdx.x;
 	int tidx = threadIdx.x;
-	int TextRange = 10 + PatternLen;
-	int TextStart = bidx * 10;
+	int TextRange = 100 + PatternLen;
+	int TextStart = bidx * 100;
 
-	int CurTextLen = 0;
-	if(tidx < PatternCount){
-		for(int i = TextStart; i<TextStart+TextRange; i++){
-			if(i >=TextLen){
-				break;
-			}
-			sharedText[CurTextLen++] = DevText[i];
-		}
+	//마지막 block일때 길이.
+	int CurTextLen = (TextLen/100) -1 == bidx ? 100-PatternLen : 100;
 
-		for(int i=0; i < CurTextLen-PatternLen; i++){
+	if(tidx<TextRange && (TextStart + tidx < TextLen)){
+		sharedText[tidx] = DevText[TextStart+tidx];
+	}
+	__syncthreads();
+	if(tidx<PatternCount){
+		for(int i=0; i < CurTextLen; i++){
 			int temp = DevCalQgram(sharedText, i+PatternLen-BlockSize, PatternLen, BlockSize);
 			
 			if(temp == DevHash[tidx]){
@@ -335,11 +334,10 @@ __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes
 					int idx = tidx + PatternCount * tmp;
 					printf("%d ",DevLoc[idx]);
 				}
-				printf("\n");
-				*/
-				//atomicAdd(&DevMatchRes[0], 1);
+				printf("\n");*/
+				
 				atomicAdd(&DevMatchRes[0], 1);
-				DevMatchDetail[TextStart+i] = true;
+				//DevMatchDetail[TextStart+i] = true;
 				}
 			}
 		}
@@ -455,7 +453,7 @@ int main(){
 
 					SearchStart = clock();	
 					//블럭개수 늘리기
-					Search<<<(TextLen/10)+1, ThreadCount, 100>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
+					Search<<<(TextLen/100), ThreadCount, 10000>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
 					cudaDeviceSynchronize();
 
 					SearchEnd = clock();

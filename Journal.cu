@@ -400,7 +400,7 @@ int main(){
 	for (int BlockSize = 3; BlockSize <= 3; BlockSize++) {
 		for (int PatternCount = 100; PatternCount <= 1000; PatternCount += 100) { // 100~1000
 			for (int PatternLen = 3; PatternLen <= 15; PatternLen += 1) { //3~15
-				for (int TextLen = 50'000; TextLen <= 50'000; TextLen += 10'000) { //100'000 ~ 1'000'000
+				for (int TextLen = 100'000; TextLen <= 1'000'000; TextLen += 100'000) { //100'000 ~ 1'000'000
 					TotalStart= clock();
 					Text = new int[TextLen];
 
@@ -472,9 +472,6 @@ int main(){
 					FreeVariable(DevMatchRes, DevHash, DevText,DevE, Text, Pattern, Loc, Hash, E, PatternCount, MatchRes, MatchResDetail, DevMatchDetail);
 					TotalEnd = clock();
 					OutputTime(Pre1End-Pre1Start, Pre2End-Pre2Start, SearchEnd-SearchStart,TotalEnd - TotalStart,CopyToHostEnd- CopyToHostStart, CopyToDeviceEnd- CopyToDeviceStart, PatternCount,PatternLen, TextLen, FolderNumber );
-					/*printf("Search Time : %fms\n",(double)(SearchEnd-SearchStart)/CLOCKS_PER_SEC);
-					printf("Copy Time : %fms\n",(double)(CopyToHostEnd-CopyToHostStart)/CLOCKS_PER_SEC);
-					printf("Total Time : %fms\n",(double)(TotalEnd-TotalStart)/CLOCKS_PER_SEC);*/
 				}	
 			}
 		}
