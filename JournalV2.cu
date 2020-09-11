@@ -19,6 +19,7 @@
 #define MAX_COUNT 1'000
 #define ThreadCount 1'024
 #define CopySize 1'000'005
+#define GpuTextLen 1'000
 using namespace std;
 
 typedef pair<int,int> P;
@@ -308,19 +309,18 @@ __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes
 	extern __shared__ int sharedText[]; //dynamic allocation
 	int bidx = blockIdx.x;
 	int tidx = threadIdx.x;
-	int TextRange = 10 + PatternLen;
-	int TextStart = bidx * 10;
+	int TextRange = GpuTextLen + PatternLen;
+	int TextStart = bidx * GpuTextLen;
 
-	int CurTextLen = 0;
-	if(tidx < PatternCount){
-		for(int i = TextStart; i<TextStart+TextRange; i++){
-			if(i >=TextLen){
-				break;
-			}
-			sharedText[CurTextLen++] = DevText[i];
-		}
+	//마지막 block일때 길이.
+	int CurTextLen = (TextLen/GpuTextLen) -1 == bidx ? GpuTextLen-PatternLen : GpuTextLen;
 
-		for(int i=0; i < CurTextLen-PatternLen; i++){
+	if(tidx<TextRange && (TextStart + tidx < TextLen)){
+		sharedText[tidx] = DevText[TextStart+tidx];
+	}
+	__syncthreads();
+	if(tidx<PatternCount){
+		for(int i=0; i < CurTextLen; i++){
 			int temp = DevCalQgram(sharedText, i+PatternLen-BlockSize, PatternLen, BlockSize);
 			
 			if(temp == DevHash[tidx]){
@@ -335,11 +335,10 @@ __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes
 					int idx = tidx + PatternCount * tmp;
 					printf("%d ",DevLoc[idx]);
 				}
-				printf("\n");
-				*/
-				//atomicAdd(&DevMatchRes[0], 1);
+				printf("\n");*/
+				
 				atomicAdd(&DevMatchRes[0], 1);
-				DevMatchDetail[TextStart+i] = true;
+				//DevMatchDetail[TextStart+i] = true;
 				}
 			}
 		}
@@ -455,7 +454,7 @@ int main(){
 
 					SearchStart = clock();	
 					//블럭개수 늘리기
-					Search<<<(TextLen/10)+1, ThreadCount, 100>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
+					Search<<<(TextLen/GpuTextLen), ThreadCount, 6000>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
 					cudaDeviceSynchronize();
 
 					SearchEnd = clock();

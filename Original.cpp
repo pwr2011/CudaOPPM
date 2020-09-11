@@ -33,10 +33,10 @@ void OutputData(int PatternCount, int PatternLen, int TextLen, int FolderNumber,
 
 	ofstream FileStream(FileName);
 	FileStream << MatchRes;
-	FileStream<<"\n";
+	/*FileStream<<"\n";
 	for(int t=0;t<TextLen; t++){
 		FileStream<<Match[t]<<" ";
-	}
+	}*/
 	FileStream.close();
 }
 
@@ -315,8 +315,7 @@ void Search_H(int *match_count, bool *match, int *Text, int **p, int *Hash_Arr, 
 	// Fingerprint table
 
 	while (start_idx < TEXT_SIZE - q)
-	{ // -q
-
+	{ 
 		int temp = q_gram_H(Text, start_idx, m, q);
 		for (int i = 0; i < PATTERN_COUNT; i++)
 		{ //temp
@@ -327,18 +326,6 @@ void Search_H(int *match_count, bool *match, int *Text, int **p, int *Hash_Arr, 
 
 				if (Check_OP(Text, p[i], s, P_len, phi_inv[i], E[i]))
 				{
-					/*if(s == 49187){
-						for(int tmp=s;tmp<s+PATTERN_LEN;tmp++){
-							printf("%d ",Text[tmp]);
-						}
-						printf("\n");
-
-						for(int tmp = 0; tmp<PATTERN_LEN;tmp++){
-							printf("%d ",p[i][tmp]);
-						}
-						printf("\n");
-				
-					}*/
 					match_count[0] += 1;
 					match[s] = 1;
 				}
@@ -374,7 +361,7 @@ int main()
 	bool *match;
 
 	int T = 1;
-	for (int FolderNumber = 0; FolderNumber <= 2; FolderNumber++)
+	for (int FolderNumber = 0; FolderNumber <= 99; FolderNumber++)
 	{
 		for (int BLOCK_SIZE = 3; BLOCK_SIZE <= 3; BLOCK_SIZE++)
 		{
@@ -382,7 +369,7 @@ int main()
 			{
 				for (int PATTERN_LEN = 3; PATTERN_LEN <= 15; PATTERN_LEN += 1)
 				{
-					for (int TEXT_SIZE = 50'000; TEXT_SIZE <= 50'000; TEXT_SIZE += 10'000)
+					for (int TEXT_SIZE = 100'000; TEXT_SIZE <= 1'000'000; TEXT_SIZE += 100'000)
 					{
 						for (int t = 0; t < T; t++)
 						{

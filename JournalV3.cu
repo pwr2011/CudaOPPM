@@ -19,6 +19,7 @@
 #define MAX_COUNT 1'000
 #define ThreadCount 1'024
 #define CopySize 1'000'005
+#define GpuTextLen 100
 using namespace std;
 
 typedef pair<int,int> P;
@@ -75,10 +76,10 @@ void OutputData(int PatternCount, int PatternLen, int TextLen, int FolderNumber,
 	 
 	ofstream FileStream(FileName);
 	FileStream<<MatchRes;
-	FileStream<<"\n";
+	/*FileStream<<"\n";
 	for(int t=0;t<TextLen; t++){
 		FileStream<<MatchResDetail[t]<<" ";
-	}
+	}*/
 	FileStream.close();
 }
 
@@ -308,11 +309,11 @@ __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes
 	extern __shared__ int sharedText[]; //dynamic allocation
 	int bidx = blockIdx.x;
 	int tidx = threadIdx.x;
-	int TextRange = 100 + PatternLen;
-	int TextStart = bidx * 100;
+	int TextRange = GpuTextLen + PatternLen;
+	int TextStart = bidx * GpuTextLen;
 
 	//마지막 block일때 길이.
-	int CurTextLen = (TextLen/100) -1 == bidx ? 100-PatternLen : 100;
+	int CurTextLen = (TextLen/GpuTextLen) -1 == bidx ? GpuTextLen-PatternLen : GpuTextLen;
 
 	if(tidx<TextRange && (TextStart + tidx < TextLen)){
 		sharedText[tidx] = DevText[TextStart+tidx];
@@ -337,7 +338,7 @@ __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes
 				printf("\n");*/
 				
 				atomicAdd(&DevMatchRes[0], 1);
-				//DevMatchDetail[TextStart+i] = true;
+				DevMatchDetail[TextStart+i] = true;
 				}
 			}
 		}
@@ -394,7 +395,7 @@ int main(){
 	int * DevE;
 	bool * DevMatchDetail;
 
-	for(int FolderNumber = 0;FolderNumber <=2;FolderNumber++){
+	for(int FolderNumber = 0;FolderNumber <=99;FolderNumber++){
 	for (int BlockSize = 3; BlockSize <= 3; BlockSize++) {
 		for (int PatternCount = 100; PatternCount <= 1000; PatternCount += 100) { // 100~1000
 			for (int PatternLen = 3; PatternLen <= 15; PatternLen += 1) { //3~15
@@ -453,7 +454,7 @@ int main(){
 
 					SearchStart = clock();	
 					//블럭개수 늘리기
-					Search<<<(TextLen/100), ThreadCount, 10000>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
+					Search<<<(TextLen/GpuTextLen), ThreadCount, 1000>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
 					cudaDeviceSynchronize();
 
 					SearchEnd = clock();
