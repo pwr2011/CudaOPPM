@@ -2,7 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <cstdlib>
-#include <ctime>
+#include "time.h"
 #include <iomanip>
 #include <cmath>
 #include <cstring>
@@ -40,12 +40,12 @@ void OutputData(int PatternCount, int PatternLen, int TextLen, int FolderNumber,
 	FileStream.close();
 }
 
-void OutputTime(double Pre1, double Pre2, double Search, double Total, int PatternCount,int PatternLen, int TextLen, int FolderNumber ){
+void OutputTime(double Pre1, double Pre2, double Pre, double Search, double Total, int PatternCount,int PatternLen, int TextLen, int FolderNumber ){
 	string FileName = TIME_FOLDER + to_string(FolderNumber) + "/" + PatternInput + "_" +
 					  to_string(PatternCount) + "_" + to_string(PatternLen) + "_" + to_string(TextLen) + ".txt";
 
 	ofstream FileStream(FileName);
-	FileStream<<(Pre1 / CLOCKS_PER_SEC)<<" "<<(Search/CLOCKS_PER_SEC)<<" "<<(Total/CLOCKS_PER_SEC);
+	FileStream<<(Pre)/1000<<" "<<(Search)/1000<<" "<<(Total)/1000;
 	FileStream.close();
 }
 
@@ -347,6 +347,8 @@ int main()
 	clock_t Pre1End;
 	clock_t Pre2Start;
 	clock_t Pre2End;
+	clock_t PreStart;
+	clock_t PreEnd;
 	clock_t SearchStart;
 	clock_t SearchEnd;
 	clock_t TotalStart;
@@ -363,11 +365,12 @@ int main()
 	int T = 1;
 	for (int FolderNumber = 0; FolderNumber <= 99; FolderNumber++)
 	{
+		printf("Current : TC-%d\n",FolderNumber);
 		for (int BLOCK_SIZE = 3; BLOCK_SIZE <= 3; BLOCK_SIZE++)
 		{
 			for (int PATTERN_COUNT = 100; PATTERN_COUNT <= 1000; PATTERN_COUNT += 100)
 			{
-				for (int PATTERN_LEN = 3; PATTERN_LEN <= 15; PATTERN_LEN += 1)
+				for (int PATTERN_LEN = 5; PATTERN_LEN <= 15; PATTERN_LEN += 1)
 				{
 					for (int TEXT_SIZE = 100'000; TEXT_SIZE <= 1'000'000; TEXT_SIZE += 100'000)
 					{
@@ -417,6 +420,7 @@ int main()
 								E[i] = new int[PATTERN_LEN];
 							}
 
+							PreStart = clock();
 							Pre1Start = clock();
 							// PatternSet
 							preprocessing_phi(PATTERN_SET, phi, phi_inv, E, PATTERN_COUNT, PATTERN_LEN);
@@ -426,6 +430,7 @@ int main()
 							Pre2Start = clock();
 							preprocessing_table(PATTERN_SET, BLOCK_SIZE, PATTERN_COUNT, PATTERN_LEN, hash_Arr);
 							Pre2End = clock();
+							PreEnd = clock();
 
 							match = new bool[MAX_TEXT_SIZE];
 							int *match_count = new int[1];
@@ -465,9 +470,9 @@ int main()
 							delete[] TEXT;
 							delete[] PATTERN_SET;
 							TotalEnd = clock();
-							OutputTime(Pre1End-Pre1Start, Pre2End-Pre2Start, SearchEnd- SearchStart, TotalEnd-TotalStart,
+							OutputTime(Pre1End-Pre1Start, Pre2End-Pre2Start,PreEnd-PreStart, SearchEnd- SearchStart, TotalEnd-TotalStart,
 							PATTERN_COUNT,PATTERN_LEN, TEXT_SIZE, FolderNumber);
-							PrintTestInfo(PATTERN_COUNT, PATTERN_LEN, TEXT_SIZE, match_count[0]);
+							//PrintTestInfo(PATTERN_COUNT, PATTERN_LEN, TEXT_SIZE, match_count[0]);
 						}
 					}
 				}

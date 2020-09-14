@@ -10,6 +10,7 @@
 #include "cuda_by_example/common/book.h"
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
+#include "time.h"
 #include<cstdlib>
 #include<stdio.h>
 #include<fstream>
@@ -19,7 +20,7 @@
 #define MAX_COUNT 1'000
 #define ThreadCount 1'024
 #define CopySize 1'000'005
-#define GpuTextLen 1'000
+#define GpuTextLen 100
 using namespace std;
 
 typedef pair<int,int> P;
@@ -38,6 +39,8 @@ clock_t Pre1Start;
 clock_t Pre1End;
 clock_t Pre2Start;
 clock_t Pre2End;
+clock_t PreStart;
+clock_t PreEnd;
 clock_t CopyToDeviceStart;
 clock_t CopyToDeviceEnd;
 clock_t CopyToHostStart;
@@ -83,13 +86,13 @@ void OutputData(int PatternCount, int PatternLen, int TextLen, int FolderNumber,
 	FileStream.close();
 }
 
-void OutputTime(double Pre1, double Pre2, double Search, double Total,double CopyToHost, double CopyToDevice, int PatternCount,int PatternLen, int TextLen, int FolderNumber ){
+void OutputTime(double Pre1, double Pre2, double Pre, double Search, double Total,double CopyToHost, double CopyToDevice, int PatternCount,int PatternLen, int TextLen, int FolderNumber ){
 	string FileName = TimeFolder + to_string(FolderNumber) + "/" + PatternInput + "_" +
 					  to_string(PatternCount) + "_" + to_string(PatternLen) + "_" + to_string(TextLen) + ".txt";
 
 	ofstream FileStream(FileName);
-	FileStream<<(Pre1 / CLOCKS_PER_SEC)<<" "<<(Search/CLOCKS_PER_SEC)<<" "
-	<<(Total/CLOCKS_PER_SEC)<<" "<<(CopyToHost/CLOCKS_PER_SEC)<<" "<<(CopyToDevice/CLOCKS_PER_SEC);
+	FileStream<<(double)(Pre/1000)<<" "<<(double)(Search)<<" "
+	<<(double)(Total)/1000<<" "<<(double)(CopyToHost)/1000<<" "<<(double)(CopyToDevice)/1000;
 	FileStream.close();
 }
 
@@ -337,8 +340,8 @@ __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes
 				}
 				printf("\n");*/
 				
-				atomicAdd(&DevMatchRes[0], 1);
-				//DevMatchDetail[TextStart+i] = true;
+				//atomicAdd(&DevMatchRes[0], 1);
+				DevMatchDetail[TextStart+i] = true;
 				}
 			}
 		}
@@ -395,11 +398,15 @@ int main(){
 	int * DevE;
 	bool * DevMatchDetail;
 
-	for(int FolderNumber = 0;FolderNumber <=2;FolderNumber++){
+	for(int FolderNumber = 0;FolderNumber <=99;FolderNumber++){
+		printf("Current : TC-%d\n",FolderNumber);
 	for (int BlockSize = 3; BlockSize <= 3; BlockSize++) {
 		for (int PatternCount = 100; PatternCount <= 1000; PatternCount += 100) { // 100~1000
-			for (int PatternLen = 3; PatternLen <= 15; PatternLen += 1) { //3~15
+			for (int PatternLen = 5; PatternLen <= 15; PatternLen += 1) { //3~15
 				for (int TextLen = 100'000; TextLen <= 1'000'000; TextLen += 100'000) { //100'000 ~ 1'000'000
+					float elapsed=0;
+					cudaEvent_t start, stop;
+
 					TotalStart= clock();
 					Text = new int[TextLen];
 
@@ -417,6 +424,7 @@ int main(){
 					//Read Text and Pattern
 					InputData(Pattern, Text, PatternCount, PatternLen, TextLen,FolderNumber);
 					//Fill the Location table
+					PreStart = clock();
 					Pre1Start = clock();
 					FillLoc(Pattern, Loc, E, PatternCount, PatternLen);
 					Pre1End = clock();
@@ -425,13 +433,7 @@ int main(){
 					Pre2Start = clock();
 					FillHash(Pattern, BlockSize, PatternCount, PatternLen, Hash);
 					Pre2End = clock();
-
-					/*for(int i=0;i<PatternCount;i++){
-						for(int j=0;j<PatternLen;j++){
-							int idx = i + j*PatternCount;
-							printf("%d\n",Loc[idx]);
-						}
-					}*/
+					PreEnd = clock();
 
 					//GPU Init !InitLocGpu는 관리자 권한으로 실행해야함!
 					InitLocGpu(Loc, PatternCount, PatternLen);
@@ -452,12 +454,19 @@ int main(){
 					CopyToDeviceEnd= clock();
 					//Kernel !3rd parameter is shared memory size in byte. Take care!
 
-					SearchStart = clock();	
+					HANDLE_ERROR(cudaEventCreate(&start));
+					HANDLE_ERROR(cudaEventCreate(&stop));
+					HANDLE_ERROR( cudaEventRecord(start, 0));
 					//블럭개수 늘리기
-					Search<<<(TextLen/GpuTextLen), ThreadCount, 6000>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
+					Search<<<(TextLen/GpuTextLen), ThreadCount, 1000>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
 					cudaDeviceSynchronize();
 
-					SearchEnd = clock();
+					HANDLE_ERROR(cudaEventRecord(stop, 0));
+					HANDLE_ERROR(cudaEventSynchronize (stop));
+					HANDLE_ERROR(cudaEventElapsedTime(&elapsed, start, stop) );
+					
+					HANDLE_ERROR(cudaEventDestroy(start));
+					HANDLE_ERROR(cudaEventDestroy(stop));
 					
 					MatchRes = new int[2];
 					CopyToHostStart = clock();
@@ -465,12 +474,12 @@ int main(){
 					HANDLE_ERROR(cudaMemcpy(MatchRes, DevMatchRes, sizeof(int), cudaMemcpyDeviceToHost));
 					CopyToHostEnd = clock();
 
-					PrintTestInfo(PatternCount, PatternLen,TextLen, MatchRes[0]);
-					OutputData(PatternCount, PatternLen, TextLen, FolderNumber, MatchRes[0], MatchResDetail);
+					//PrintTestInfo(PatternCount, PatternLen,TextLen, MatchRes[0]);
+					//OutputData(PatternCount, PatternLen, TextLen, FolderNumber, MatchRes[0], MatchResDetail);
 					//Freeing Variable
 					FreeVariable(DevMatchRes, DevHash, DevText,DevE, Text, Pattern, Loc, Hash, E, PatternCount, MatchRes, MatchResDetail, DevMatchDetail);
 					TotalEnd = clock();
-					OutputTime(Pre1End-Pre1Start, Pre2End-Pre2Start, SearchEnd-SearchStart,TotalEnd - TotalStart,CopyToHostEnd- CopyToHostStart, CopyToDeviceEnd- CopyToDeviceStart, PatternCount,PatternLen, TextLen, FolderNumber );
+					OutputTime(Pre1End-Pre1Start, Pre2End-Pre2Start, PreEnd-PreStart,elapsed,TotalEnd - TotalStart,CopyToHostEnd- CopyToHostStart, CopyToDeviceEnd- CopyToDeviceStart, PatternCount,PatternLen, TextLen, FolderNumber );
 				}	
 			}
 		}
