@@ -12,6 +12,7 @@ int a = 0;
 #define MAX_TEXT_SIZE 1'000'000
 #define MAX_COUNT 2000
 #define MAX_LEN 15
+#define Repeat 10
 //#define BLOCK_SIZE 3
 //#define TEXT_SIZE 10000
 
@@ -22,11 +23,12 @@ int a = 0;
 string TC_FOLDER = "./TESTCASE/TC-";
 string TEXT_FILE = "TextSample";
 string PATTERN_FILE = "IntStr";
-string TIME_FOLDER = "./OriginalTIME/TC-";
+string TIME_FOLDER = "./OriginalTIME/";
 string OutputFolder = "./OriginalOUTPUT/TC-";
 string PatternInput = "IntStr";
+int PreCalFac[10] = { 0, 0, 0, 6, 24, 120, 720, 5040, 40320, 362880 };
 
-void OutputData(int PatternCount, int PatternLen, int TextLen, int FolderNumber, int MatchRes,bool *Match)
+void OutputData(int PatternCount, int PatternLen, int TextLen, int FolderNumber, int MatchRes, bool *Match)
 {
 	string FileName = OutputFolder + to_string(FolderNumber) + "/" + PatternInput + "_" +
 					  to_string(PatternCount) + "_" + to_string(PatternLen) + "_" + to_string(TextLen) + ".txt";
@@ -39,13 +41,14 @@ void OutputData(int PatternCount, int PatternLen, int TextLen, int FolderNumber,
 	}*/
 	FileStream.close();
 }
-
-void OutputTime(double Pre1, double Pre2, double Pre, double Search, double Total, int PatternCount,int PatternLen, int TextLen, int FolderNumber ){
-	string FileName = TIME_FOLDER + to_string(FolderNumber) + "/" + PatternInput + "_" +
-					  to_string(PatternCount) + "_" + to_string(PatternLen) + "_" + to_string(TextLen) + ".txt";
+void OutputTime(double Pre, double Search, double Total, int PatternCount, int PatternLen, int TextLen, int BlockSize)
+{
+	string FileName = TIME_FOLDER + PatternInput + "_" +
+					  to_string(PatternCount) + "_" + to_string(PatternLen) + "_" +
+					   to_string(TextLen) + "_" + to_string(BlockSize)+".txt";
 
 	ofstream FileStream(FileName);
-	FileStream<<(Pre)/1000<<" "<<(Search)/1000<<" "<<(Total)/1000;
+	FileStream << (double)(Pre / 1000)/Repeat << " " << (double)(Search / 1000)/Repeat << " " << (double)(Total / 1000)/Repeat;
 	FileStream.close();
 }
 
@@ -69,10 +72,6 @@ int **make_p_prime(int **p, int m, int PATTERN_COUNT)
 	return temp;
 }
 
-int factorial(int n)
-{
-	return (n == 1 || n == 0) ? 1 : factorial(n - 1) * n;
-}
 int q_gram_H(int *p, int s_idx, int m, int q)
 {
 
@@ -95,7 +94,7 @@ int q_gram_H(int *p, int s_idx, int m, int q)
 			if (p[k] <= p[j])
 				count++;
 		}
-		result += count * factorial(j - i);
+		result += count * PreCalFac[j - i];
 	}
 
 	ret = result;
@@ -315,7 +314,7 @@ void Search_H(int *match_count, bool *match, int *Text, int **p, int *Hash_Arr, 
 	// Fingerprint table
 
 	while (start_idx < TEXT_SIZE - q)
-	{ 
+	{
 		int temp = q_gram_H(Text, start_idx, m, q);
 		for (int i = 0; i < PATTERN_COUNT; i++)
 		{ //temp
@@ -359,124 +358,121 @@ int main()
 	int **E;
 	int *TEXT;
 	int *hash_Arr;
-	
+
 	bool *match;
 
-	int T = 1;
-	for (int FolderNumber = 0; FolderNumber <= 99; FolderNumber++)
+	for (int BLOCK_SIZE = 3; BLOCK_SIZE <= 9; BLOCK_SIZE++)
 	{
-		printf("Current : TC-%d\n",FolderNumber);
-		for (int BLOCK_SIZE = 3; BLOCK_SIZE <= 3; BLOCK_SIZE++)
+		for (int PATTERN_COUNT = 1000; PATTERN_COUNT <= 1000; PATTERN_COUNT += 100)
 		{
-			for (int PATTERN_COUNT = 100; PATTERN_COUNT <= 1000; PATTERN_COUNT += 100)
+			for (int PATTERN_LEN = 9; PATTERN_LEN <= 9; PATTERN_LEN += 1)
 			{
-				for (int PATTERN_LEN = 5; PATTERN_LEN <= 15; PATTERN_LEN += 1)
+				printf("Pattern Count: %d\nPattern Len : %d\n",PATTERN_COUNT, PATTERN_LEN);
+				for (int TEXT_SIZE = 1'000'000; TEXT_SIZE <= 1'000'000; TEXT_SIZE += 100'000)
 				{
-					for (int TEXT_SIZE = 100'000; TEXT_SIZE <= 1'000'000; TEXT_SIZE += 100'000)
+					double TotalPre = 0;
+					float TotalSearch = 0;
+					double Total = 0;
+					for (int FolderNumber = 0; FolderNumber < Repeat; FolderNumber++)
 					{
-						for (int t = 0; t < T; t++)
+						a = 0;
+
+						// Read Pattern Information
+						string pattern_filename = TC_FOLDER + to_string(FolderNumber) + "/" + PATTERN_FILE + "_" +
+												  to_string(PATTERN_COUNT) + "_" + to_string(PATTERN_LEN) + ".txt";
+						ifstream pattern(pattern_filename);
+						PATTERN_SET = new int *[PATTERN_COUNT];
+						for (int i = 0; i < PATTERN_COUNT; i++)
 						{
-							a = 0;
-
-							TotalStart = clock();
-							// Read Pattern Information
-							string pattern_filename = TC_FOLDER + to_string(FolderNumber) + "/" + PATTERN_FILE + "_" +
-													  to_string(PATTERN_COUNT) + "_" + to_string(PATTERN_LEN) + ".txt";
-							ifstream pattern(pattern_filename);
-							PATTERN_SET = new int *[PATTERN_COUNT];
-							for (int i = 0; i < PATTERN_COUNT; i++)
+							PATTERN_SET[i] = new int[PATTERN_LEN];
+						}
+						for (int i = 0; i < PATTERN_COUNT; i++)
+						{
+							for (int j = 0; j < PATTERN_LEN; j++)
 							{
-								PATTERN_SET[i] = new int[PATTERN_LEN];
+								pattern >> PATTERN_SET[i][j];
 							}
-							for (int i = 0; i < PATTERN_COUNT; i++)
-							{
-								for (int j = 0; j < PATTERN_LEN; j++)
-								{
-									pattern >> PATTERN_SET[i][j];
-								}
-							}
-							pattern.close();
+						}
+						pattern.close();
 
-							// Read Text Information - �ؽ�Ʈ ���� ����
-							string text_filename = TC_FOLDER + to_string(FolderNumber) + "/" + TEXT_FILE + "_" + to_string(TEXT_SIZE) + ".txt";
-							ifstream text(text_filename);
-							TEXT = new int[TEXT_SIZE];
-							for (int i = 0; i < TEXT_SIZE; i++)
-							{
-								text >> TEXT[i];
-							}
-							text.close();
-							/****************************************/
+						// Read Text Information - �ؽ�Ʈ ���� ����
+						string text_filename = TC_FOLDER + to_string(FolderNumber) + "/" + TEXT_FILE + "_" + to_string(TEXT_SIZE) + ".txt";
+						ifstream text(text_filename);
+						TEXT = new int[TEXT_SIZE];
+						for (int i = 0; i < TEXT_SIZE; i++)
+						{
+							text >> TEXT[i];
+						}
+						text.close();
+						/****************************************/
 
-							// ��ó�� �ܰ迡�� ���� Array �ʱ�ȭ
-							hash_Arr = new int[PATTERN_COUNT];
-							phi = new int *[PATTERN_COUNT];
-							phi_inv = new int *[PATTERN_COUNT];
-							E = new int *[PATTERN_COUNT];
-							for (int i = 0; i < PATTERN_COUNT; i++)
-							{
-								phi[i] = new int[PATTERN_LEN];
-								phi_inv[i] = new int[PATTERN_LEN];
-								E[i] = new int[PATTERN_LEN];
-							}
+						// ��ó�� �ܰ迡�� ���� Array �ʱ�ȭ
+						
+						TotalStart = clock();
+						hash_Arr = new int[PATTERN_COUNT];
+						phi = new int *[PATTERN_COUNT];
+						phi_inv = new int *[PATTERN_COUNT];
+						E = new int *[PATTERN_COUNT];
+						for (int i = 0; i < PATTERN_COUNT; i++)
+						{
+							phi[i] = new int[PATTERN_LEN];
+							phi_inv[i] = new int[PATTERN_LEN];
+							E[i] = new int[PATTERN_LEN];
+						}
 
-							PreStart = clock();
-							Pre1Start = clock();
-							// PatternSet
-							preprocessing_phi(PATTERN_SET, phi, phi_inv, E, PATTERN_COUNT, PATTERN_LEN);
-							Pre1End = clock();
+						PreStart = clock();
+						// PatternSet
+						preprocessing_phi(PATTERN_SET, phi, phi_inv, E, PATTERN_COUNT, PATTERN_LEN);
 
-							// FingerPrint Table
-							Pre2Start = clock();
-							preprocessing_table(PATTERN_SET, BLOCK_SIZE, PATTERN_COUNT, PATTERN_LEN, hash_Arr);
-							Pre2End = clock();
-							PreEnd = clock();
+						// FingerPrint Table
+						preprocessing_table(PATTERN_SET, BLOCK_SIZE, PATTERN_COUNT, PATTERN_LEN, hash_Arr);
+						PreEnd = clock();
 
-							match = new bool[MAX_TEXT_SIZE];
-							int *match_count = new int[1];
-							match_count[0] = 0;
+						match = new bool[MAX_TEXT_SIZE];
+						int *match_count = new int[1];
+						match_count[0] = 0;
 
-							memset(match, 0, MAX_TEXT_SIZE * sizeof(bool));
-							SearchStart = clock();
-							Search_H(match_count, match, TEXT, PATTERN_SET, hash_Arr, phi_inv, E, PATTERN_COUNT, PATTERN_LEN, BLOCK_SIZE, TEXT_SIZE);
-							SearchEnd = clock();
+						memset(match, 0, MAX_TEXT_SIZE * sizeof(bool));
+						SearchStart = clock();
+						Search_H(match_count, match, TEXT, PATTERN_SET, hash_Arr, phi_inv, E, PATTERN_COUNT, PATTERN_LEN, BLOCK_SIZE, TEXT_SIZE);
+						SearchEnd = clock();
 
-							OutputData(PATTERN_COUNT, PATTERN_LEN, TEXT_SIZE, FolderNumber, match_count[0], match);
+						OutputData(PATTERN_COUNT, PATTERN_LEN, TEXT_SIZE, FolderNumber, match_count[0], match);
 
-							/*for (int col = 0; col < PATTERN_COUNT; col++) {
+						/*for (int col = 0; col < PATTERN_COUNT; col++) {
 						for (int row = 0; row < TEXT_SIZE; row++) {
 							out_fp << (match[col*TEXT_SIZE+row]) << " ";
 						}
 						out_fp << "\n";
 					}*/
 
-							//printf("Time : %f\n", (double)(SearchEnd - SearchStart) / CLOCKS_PER_SEC);
-							delete[] match;
-							delete[] hash_Arr;
-							for (int i = 0; i < PATTERN_COUNT; i++)
-							{
-								delete[] phi[i];
-								delete[] phi_inv[i];
-								delete[] E[i];
-							}
-							delete[] phi;
-							delete[] phi_inv;
-							delete[] E;
-
-							for (int i = 0; i < PATTERN_COUNT; i++)
-							{
-								delete[] PATTERN_SET[i];
-							}
-							delete[] TEXT;
-							delete[] PATTERN_SET;
-							TotalEnd = clock();
-							OutputTime(Pre1End-Pre1Start, Pre2End-Pre2Start,PreEnd-PreStart, SearchEnd- SearchStart, TotalEnd-TotalStart,
-							PATTERN_COUNT,PATTERN_LEN, TEXT_SIZE, FolderNumber);
-							//PrintTestInfo(PATTERN_COUNT, PATTERN_LEN, TEXT_SIZE, match_count[0]);
+						//printf("Time : %f\n", (double)(SearchEnd - SearchStart) / CLOCKS_PER_SEC);
+						delete[] match;
+						delete[] hash_Arr;
+						for (int i = 0; i < PATTERN_COUNT; i++)
+						{
+							delete[] phi[i];
+							delete[] phi_inv[i];
+							delete[] E[i];
 						}
+						delete[] phi;
+						delete[] phi_inv;
+						delete[] E;
+
+						for (int i = 0; i < PATTERN_COUNT; i++)
+						{
+							delete[] PATTERN_SET[i];
+						}
+						delete[] TEXT;
+						delete[] PATTERN_SET;
+						TotalEnd = clock();
+						Total += TotalEnd - TotalStart;
+						TotalPre += PreEnd - PreStart;
+						TotalSearch += SearchEnd - SearchStart;
+						//PrintTestInfo(PATTERN_COUNT, PATTERN_LEN, TEXT_SIZE, match_count[0]);
 					}
+					OutputTime(TotalPre,TotalSearch,Total, PATTERN_COUNT, PATTERN_LEN, TEXT_SIZE,BLOCK_SIZE);
 				}
-				cout << endl;
 			}
 		}
 	}

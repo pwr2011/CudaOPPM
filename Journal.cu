@@ -395,13 +395,6 @@ int main(){
 					FillHash(Pattern, BlockSize, PatternCount, PatternLen, Hash);
 					Pre2End = clock();
 
-					/*for(int i=0;i<PatternCount;i++){
-						for(int j=0;j<PatternLen;j++){
-							int idx = i + j*PatternCount;
-							printf("%d\n",Loc[idx]);
-						}
-					}*/
-
 					//GPU Init !InitLocGpu는 관리자 권한으로 실행해야함!
 					InitLocGpu(Loc, PatternCount, PatternLen);
 					
