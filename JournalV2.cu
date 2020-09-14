@@ -10,7 +10,7 @@
 #include "cuda_by_example/common/book.h"
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-#include "time.h"
+#include<sys/time.h>
 #include<cstdlib>
 #include<stdio.h>
 #include<fstream>
@@ -37,12 +37,7 @@ string TextInput = "TextSample";
 string PatternInput = "IntStr";
 string TimeInput = "TimeRecord_";
 
-clock_t PreStart;
-clock_t PreEnd;
-clock_t SearchStart;
-clock_t SearchEnd;
-clock_t TotalStart;
-clock_t TotalEnd;
+struct timeval PreStart, PreEnd, SearchStart, SearchEnd, TotalStart, TotalEnd;
 
 int PreCalFac[10] = { 0, 1, 2, 6, 24, 120, 720, 5040, 40320, 362880}; //0!~9!
 
@@ -69,9 +64,9 @@ void InputData(int ** Pattern, int * Text, int PatternCount, int PatternLen, int
 	return ;
 }
 
-void OutputData(int PatternCount, int PatternLen, int TextLen, int FolderNumber,int MatchRes, bool * MatchResDetail){
+void OutputData(int PatternCount, int PatternLen, int TextLen,int BlockSize, int FolderNumber,int MatchRes, bool * MatchResDetail){
 	string FileName = OutputFolder+ to_string(FolderNumber)+"/"+PatternInput + "_" +
-	 to_string(PatternCount) + "_" +to_string(PatternLen) +"_"+to_string(TextLen) + ".txt";
+	 to_string(PatternCount) + "_" +to_string(PatternLen) +"_"+to_string(TextLen) +"_"+to_string(BlockSize) + ".txt";
 	 
 	ofstream FileStream(FileName);
 	FileStream<<MatchRes;
@@ -88,8 +83,8 @@ void OutputTime(double Pre, float Search, double Total, int PatternCount,int Pat
 					   to_string(TextLen) + "_" + to_string(BlockSize)+".txt";
 
 	ofstream FileStream(FileName);
-	FileStream<<(double)(Pre/1000)/Repeat<<" "<<(double)(Search)/Repeat<<" "
-	<<(double)(Total/1000)/Repeat;
+	FileStream<<(double)(Pre)/Repeat<<" "<<(double)(Search)/Repeat<<" "
+	<<(double)(Total)/Repeat;
 
 	FileStream.close();
 }
@@ -298,7 +293,7 @@ __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes
 			
 			if(temp == DevHash[tidx]){
 				if(CheckOP(sharedText, DevE, i,PatternLen, tidx, PatternCount)){
-				//atomicAdd(&DevMatchRes[0], 1);
+				atomicAdd(&DevMatchRes[0], 1);
 				DevMatchDetail[TextStart+i] = true;
 				}
 			}
@@ -352,19 +347,17 @@ int main(){
 	int * DevE;
 	bool * DevMatchDetail;
 
-	for (int BlockSize = 3; BlockSize <= 9; BlockSize++) {
-		for (int PatternCount = 1'000; PatternCount <= 1'000; PatternCount += 100) { // 100~1000
-			for (int PatternLen = 9; PatternLen <= 9; PatternLen += 1) { //3~15
+	for (int BlockSize = 7; BlockSize <= 7; BlockSize++) {
+		for (int PatternCount = 100; PatternCount <= 1'000; PatternCount += 100) { // 100~1000
+			for (int PatternLen = 7; PatternLen <= 15; PatternLen += 1) { //3~15
 				printf("Pattern Count: %d\nPattern Len : %d\n",PatternCount, PatternLen);
 
-				for (int TextLen = 1'000'000; TextLen <= 1'000'000; TextLen += 100'000) { //100'000 ~ 1'000'000
+				for (int TextLen = 100'000; TextLen <= 1'000'000; TextLen += 100'000) { //100'000 ~ 1'000'000
+				double sec, usec;
 				double TotalPre = 0;
-				float TotalSearch = 0;
+				double TotalSearch = 0;
 				double Total = 0;
 				for(int FolderNumber = 0;FolderNumber < Repeat;FolderNumber++){
-					float elapsed=0;
-					cudaEvent_t start, stop;
-
 					Text = new int[TextLen];
 
 					//!Warning! Only this two table is row * col => PatternLen * PatternCount
@@ -381,15 +374,15 @@ int main(){
 					//Read Text and Pattern
 					InputData(Pattern, Text, PatternCount, PatternLen, TextLen,FolderNumber);
 
-					TotalStart= clock();
+					gettimeofday(&TotalStart, NULL);
 
 					//Fill the Location table
-					PreStart = clock();
+					gettimeofday(&PreStart, NULL);
 					FillLoc(Pattern, Loc, E, PatternCount, PatternLen);
 
 					//Fill the hash table
 					FillHash(Pattern, BlockSize, PatternCount, PatternLen, Hash);
-					PreEnd = clock();
+					gettimeofday(&PreEnd, NULL);
 
 					//GPU Init !InitLocGpu는 관리자 권한으로 실행해야함!
 					InitLocGpu(Loc, PatternCount, PatternLen);
@@ -408,33 +401,34 @@ int main(){
 					HANDLE_ERROR(cudaMemset(DevMatchDetail, 0 ,TextLen*sizeof(bool)));
 
 					//Kernel !3rd parameter is shared memory size in byte. Take care!
-					HANDLE_ERROR(cudaEventCreate(&start));
-					HANDLE_ERROR(cudaEventCreate(&stop));
-					HANDLE_ERROR( cudaEventRecord(start, 0));
+					gettimeofday(&SearchStart, NULL);
 					//블럭개수 늘리기
 					Search<<<(TextLen/GpuTextLen), ThreadCount, 1000>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
 					cudaDeviceSynchronize();
 
-					HANDLE_ERROR(cudaEventRecord(stop, 0));
-					HANDLE_ERROR(cudaEventSynchronize (stop));
-					HANDLE_ERROR(cudaEventElapsedTime(&elapsed, start, stop) );
-					
-					HANDLE_ERROR(cudaEventDestroy(start));
-					HANDLE_ERROR(cudaEventDestroy(stop));
+					gettimeofday(&SearchEnd, NULL);
 					
 					MatchRes = new int[2];
 					HANDLE_ERROR(cudaMemcpy(MatchResDetail, DevMatchDetail, sizeof(bool) * TextLen, cudaMemcpyDeviceToHost));
 					HANDLE_ERROR(cudaMemcpy(MatchRes, DevMatchRes, sizeof(int), cudaMemcpyDeviceToHost));
 
 					//PrintTestInfo(PatternCount, PatternLen,TextLen, MatchRes[0]);
-					//OutputData(PatternCount, PatternLen, TextLen, FolderNumber, MatchRes[0], MatchResDetail);
+					OutputData(PatternCount, PatternLen, TextLen, BlockSize,FolderNumber, MatchRes[0], MatchResDetail);
 					//Freeing Variable
 					FreeVariable(DevMatchRes, DevHash, DevText,DevE, Text, Pattern, Loc, Hash, E, PatternCount, MatchRes, MatchResDetail, DevMatchDetail);
-					TotalEnd = clock();
+					gettimeofday(&TotalEnd, NULL);
+					
+					sec = TotalEnd.tv_sec - TotalStart.tv_sec;
+					usec = TotalEnd.tv_usec - TotalStart.tv_usec;
+					Total += (sec*1000+usec/1000.0);
 
-					TotalPre += PreEnd-PreStart;
-					TotalSearch += elapsed;
-					Total += TotalEnd - TotalStart;
+					sec = PreEnd.tv_sec - PreStart.tv_sec;
+					usec = PreEnd.tv_usec - PreStart.tv_usec;
+					TotalPre += (sec*1000+usec/1000.0);
+
+					sec = SearchEnd.tv_sec - SearchStart.tv_sec;
+					usec = SearchEnd.tv_usec - SearchStart.tv_usec;
+					TotalSearch += (sec*1000+usec/1000.0);
 				}	
 				//Folder End
 				OutputTime(TotalPre, TotalSearch, Total,PatternCount,PatternLen, TextLen,BlockSize);
