@@ -12,7 +12,7 @@ int a = 0;
 #define MAX_TEXT_SIZE 1'000'000
 #define MAX_COUNT 2000
 #define MAX_LEN 15
-#define Repeat 10
+#define Repeat 100
 //#define BLOCK_SIZE 3
 //#define TEXT_SIZE 10000
 
@@ -26,7 +26,7 @@ string PATTERN_FILE = "IntStr";
 string TIME_FOLDER = "./OriginalTIME/";
 string OutputFolder = "./OriginalOUTPUT/TC-";
 string PatternInput = "IntStr";
-int PreCalFac[10] = {0, 0, 0, 6, 24, 120, 720, 5040, 40320, 362880};
+int PreCalFac[10] = {0, 1, 2, 6, 24, 120, 720, 5040, 40320, 362880};
 
 void OutputData(int PatternCount, int PatternLen, int TextLen, int BlockSize, int FolderNumber, int MatchRes, bool *Match)
 {
