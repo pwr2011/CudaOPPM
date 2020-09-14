@@ -151,7 +151,6 @@ void merge(int first, int mid, int last, P* arr) {
 }
 
 void mergeSort(int first, int last, P* TempPattern) {
-
 	if (first < last) {
 		int mid = (first + last) / 2;
 		mergeSort(first, mid, TempPattern);
@@ -195,6 +194,7 @@ int CalQgram(int* Pattern, int StartIdx, int PatternLen, int BlockSize) {
 __device__ int DevCalQgram(int Text[], int StartIdx, int PatternLen, int BlockSize){
 	int result = 0;
 	int count;
+	int t;
 
 	for (int j = StartIdx; j < StartIdx + BlockSize; j++) {
 		count = 0;
@@ -240,31 +240,11 @@ void FillLoc(int ** Pattern, int * Loc, int* E, int PatternCount, int PatternLen
 			TempPattern[j].first = Pattern[i][j];
 			TempPattern[j].second = j;
 		}
-		/*if(i == 73){
-			printf("cur pattern\n");
-			for(int i=0;i<PatternLen;i++){
-				
-				printf("%d ",TempPattern[i].first);
-			}
-			printf("\n");
-		}*/
 		mergeSort(0, Len - 1, TempPattern);
 				
 		MakeLoc(TempPattern, Loc, Len, PatternCount, PatternLen, i);
 
 		MakeE(Pattern[i], Loc, E, Len, PatternCount, i);
-		/*if(i == 73){
-			for(int i=0;i<PatternLen;i++){
-				
-				printf("%d ",TempPattern[i].first);
-			}
-			printf("\n");
-			for(int i=0;i<PatternLen;i++){
-
-				printf("%d ",TempPattern[i].second);
-			}
-			printf("\n");
-		}*/
 		delete[] TempPattern;
 	}
 }
@@ -325,18 +305,6 @@ __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes
 			
 			if(temp == DevHash[tidx]){
 				if(CheckOP(sharedText, DevE, i,PatternLen, tidx, PatternCount)){
-				//printf("Text idx : %d Pattern idx : %d\n",TextStart+i, tidx);
-				/*for(int tmp=i;tmp<i+PatternLen;tmp++){
-					printf("%d ",sharedText[tmp]);
-				}
-				printf("\n");
-
-				for(int tmp = 0; tmp<PatternLen;tmp++){
-					int idx = tidx + PatternCount * tmp;
-					printf("%d ",DevLoc[idx]);
-				}
-				printf("\n");
-				*/
 				//atomicAdd(&DevMatchRes[0], 1);
 				atomicAdd(&DevMatchRes[0], 1);
 				DevMatchDetail[TextStart+i] = true;
