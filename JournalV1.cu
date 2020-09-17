@@ -31,13 +31,13 @@ __constant__ int DevPreCalFac[10];
 
 //Input Folder Name
 string InputFolder = "./TESTCASE/TC-";
-string OutputFolder = "./JournalV4OUTPUT/TC-";
-string TimeFolder = "./JournalV4TIME/";
+string OutputFolder = "./JournalV1OUTPUT/TC-";
+string TimeFolder = "./JournalV1TIME/";
 string TextInput = "TextSample";
 string PatternInput = "IntStr";
 string TimeInput = "TimeRecord_";
 
-struct timeval PreStart, PreEnd, SearchStart, SearchEnd, TotalStart, TotalEnd;
+struct timeval PreStart, PreEnd, SearchStart, SearchEnd, TotalStart, TotalEnd, CopyToHostStart, CopyToHostEnd;
 
 int PreCalFac[10] = { 0, 1, 2, 6, 24, 120, 720, 5040, 40320, 362880}; //0!~9!
 
@@ -77,14 +77,14 @@ void OutputData(int PatternCount, int PatternLen, int TextLen,int BlockSize, int
 	FileStream.close();
 }
 
-void OutputTime(double Pre, float Search, double Total, int PatternCount,int PatternLen, int TextLen,int BlockSize){
+void OutputTime(double Pre, float Search, double Total,double TotalCopy, int PatternCount,int PatternLen, int TextLen,int BlockSize){
 	string FileName = TimeFolder + PatternInput + "_" +
 					  to_string(PatternCount) + "_" + to_string(PatternLen) + "_" +
 					   to_string(TextLen) + "_" + to_string(BlockSize)+".txt";
 
 	ofstream FileStream(FileName);
 	FileStream<<(double)(Pre)/Repeat<<" "<<(double)(Search)/Repeat<<" "
-	<<(double)(Total)/Repeat;
+	<<(double)(Total)/Repeat<<" "<<(double)(TotalCopy)/Repeat;
 
 	FileStream.close();
 }
@@ -110,7 +110,7 @@ int FindLen(int* p, int PatternLen) {
 
 void merge(int first, int mid, int last, P* arr) {
 
-	int Idx = first;
+	int idx = first;
 	P TempArr[MAX_COUNT];
 
 
@@ -118,27 +118,27 @@ void merge(int first, int mid, int last, P* arr) {
 
 	while (i <= mid && j <= last) {
 		if (arr[i] <= arr[j]) {
-			TempArr[Idx] = arr[i];
-			Idx++;
+			TempArr[idx] = arr[i];
+			idx++;
 			i++;
 		}
 		else if (arr[i] > arr[j]) {
-			TempArr[Idx] = arr[j];
-			Idx++;
+			TempArr[idx] = arr[j];
+			idx++;
 			j++;
 		}
 	}
 
 	if (i > mid) {
 		for (int m = j; m <= last; m++) {
-			TempArr[Idx] = arr[m];
-			Idx++;
+			TempArr[idx] = arr[m];
+			idx++;
 		}
 	}
 	else {
 		for (int m = i; m <= mid; m++) {
-			TempArr[Idx] = arr[m];
-			Idx++;
+			TempArr[idx] = arr[m];
+			idx++;
 		}
 	}
 
@@ -181,7 +181,7 @@ int CalQgram(int* Pattern, int StartIdx, int PatternLen, int BlockSize) {
 	return result;
 }
 
-__device__ int DevCalQgram(int * Text, int StartIdx, int PatternLen, int BlockSize){
+__device__ int DevCalQgram(int Text[], int StartIdx, int PatternLen, int BlockSize){
 	int result = 0;
 	int count;
 
@@ -201,19 +201,19 @@ __device__ int DevCalQgram(int * Text, int StartIdx, int PatternLen, int BlockSi
 //Loc table은 가로 * 세로 => 패턴길이 * 패턴개수인 논리적으로는 2차원이지만 실제로는 1차원인 배열임
 void MakeLoc(P* TempPattern, int* Loc, int Len, int PatternCount,int PatternLen, int CurPatternIdx) {
 	for (int i = 0; i < Len; i++) {
-		int Idx = CurPatternIdx + i * PatternCount;
-		Loc[Idx] = TempPattern[i].second;
+		int idx = CurPatternIdx + i * PatternCount;
+		Loc[idx] = TempPattern[i].second;
 	}
 }
 
 void MakeE(int* Pattern, int* Loc, int* E, int Len,int PatternCount, int CurPatternIdx) {
 	for (int i = 0; i < Len - 1; i++) {
-		int Idx = CurPatternIdx + i * PatternCount;
+		int idx = CurPatternIdx + i * PatternCount;
 
-		if (Pattern[Loc[Idx]] == Pattern[Loc[Idx + PatternCount]])
-			E[Idx] = 1;
+		if (Pattern[Loc[idx]] == Pattern[Loc[idx + PatternCount]])
+			E[idx] = 1;
 		else
-			E[Idx] = 0;
+			E[idx] = 0;
 	}
 }
 
@@ -245,21 +245,23 @@ void FillHash(int **Pattern, int BlockSize, int PatternCount, int PatternLen, in
 		Hash[i] = CalQgram(Pattern[i], range - 1, PatternLen, BlockSize);
 	}
 }
-__device__ bool CheckOP(int * Text, int* E, int StartIdx, int PatternLen, int PatternIdx, int PatternCount) {
+
+//__device__ InitSharedMemory()
+__device__ bool CheckOP(int Text[], int* E, int StartIdx, int PatternLen, int PatternIdx, int PatternCount) {
 	
 	bool ret = true;
 	for (int i = 0; i < PatternLen-1; i++) {
-		int Idx = PatternCount * i + PatternIdx;
+		int idx = PatternCount * i + PatternIdx;
 		
-		if (E[Idx] == 0) {
-			if (Text[StartIdx + DevLoc[Idx]] >= Text[StartIdx + DevLoc[Idx + PatternCount]]) {
+		if (E[idx] == 0) {
+			if (Text[StartIdx + DevLoc[idx]] >= Text[StartIdx + DevLoc[idx + PatternCount]]) {
 				ret = false;
 				break;
 			}
 		}
 
 		else {
-			if (Text[StartIdx + DevLoc[Idx]] != Text[StartIdx + DevLoc[Idx + PatternCount]]) {
+			if (Text[StartIdx + DevLoc[idx]] != Text[StartIdx + DevLoc[idx + PatternCount]]) {
 				ret = false;
 				break;
 			}
@@ -271,37 +273,31 @@ __device__ bool CheckOP(int * Text, int* E, int StartIdx, int PatternLen, int Pa
 
 __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes,
 	 int TextLen, int PatternCount, int PatternLen,int BlockSize,bool * DevMatchDetail){
-	int m = PatternLen;
-	int q = BlockSize;
 
-	int Idx = blockIdx.x * blockDim.x + threadIdx.x;
-	int TotalThreadCount = blockDim.x * gridDim.x;
-	int TextLenPerThread = (TextLen + TotalThreadCount-1) / TotalThreadCount;
-	int StartIdx = Idx * TextLenPerThread;
-	int EndIdx = (Idx + 1) * TextLenPerThread;
-	int s = StartIdx-(m-q);
+	extern __shared__ int sharedText[]; //dynamic allocation
+	int bidx = blockIdx.x;
+	int tidx = threadIdx.x;
+	int TextRange = GpuTextLen + PatternLen;
+	int TextStart = bidx * GpuTextLen;
 
-	while (StartIdx < EndIdx) {
-		if (StartIdx < m - q) {
-			StartIdx++;
-			continue;
-		}
-		if (StartIdx >= TextLen - q) {
-			break;
-		}
-		int temp = DevCalQgram(DevText, StartIdx, m, q);
-		for (int i = 0; i < PatternCount; i++) {
-			if (temp == DevHash[i]) {
-				if (CheckOP(DevText, DevE,s ,PatternLen, i,PatternCount)) {
-					//match[TEXT_SIZE*i + StartIdx + q]=1;
-					atomicAdd(&DevMatchRes[0], 1);
-					/*atomicExch(&(match[match_count[0] - 2]), i);
-					atomicExch(&(match[match_count[0] - 1]), StartIdx + q);*/
+	//마지막 block일때 길이.
+	int CurTextLen = (TextLen/GpuTextLen) -1 == bidx ? GpuTextLen-PatternLen : GpuTextLen;
+
+	if(tidx<TextRange && (TextStart + tidx < TextLen)){
+		sharedText[tidx] = DevText[TextStart+tidx];
+	}
+	__syncthreads();
+	if(tidx<PatternCount){
+		for(int i=0; i < CurTextLen; i++){
+			int temp = DevCalQgram(sharedText, i+PatternLen-BlockSize, PatternLen, BlockSize);
+			
+			if(temp == DevHash[tidx]){
+				if(CheckOP(sharedText, DevE, i,PatternLen, tidx, PatternCount)){
+				//atomicAdd(&DevMatchRes[0], 1);
+				DevMatchDetail[(TextStart+i) + (tidx * TextLen)] = true;
 				}
 			}
 		}
-		StartIdx++;
-		s++;
 	}
 	__syncthreads();
 }
@@ -361,6 +357,7 @@ int main(){
 				double TotalPre = 0;
 				double TotalSearch = 0;
 				double Total = 0;
+				double TotalCopy = 0;
 				for(int FolderNumber = 0;FolderNumber < Repeat;FolderNumber++){
 					Text = new int[TextLen];
 
@@ -373,7 +370,7 @@ int main(){
 					for (int i = 0; i < PatternCount; i++) {
 						Pattern[i] = new int[PatternLen];
 					}
-					MatchResDetail = new bool[TextLen];
+					MatchResDetail = new bool[TextLen * PatternCount];
 
 					//Read Text and Pattern
 					InputData(Pattern, Text, PatternCount, PatternLen, TextLen,FolderNumber);
@@ -396,26 +393,28 @@ int main(){
 					HANDLE_ERROR(cudaMalloc((void**)&DevHash, sizeof(int) * PatternCount));
 					HANDLE_ERROR(cudaMalloc((void**)&DevText, sizeof(int) * TextLen));
 					HANDLE_ERROR(cudaMalloc((void**)&DevE, sizeof(int) * PatternCount * PatternLen));
-					HANDLE_ERROR(cudaMalloc((void**)&DevMatchDetail, TextLen*sizeof(bool)));
+					HANDLE_ERROR(cudaMalloc((void**)&DevMatchDetail, TextLen*PatternCount * sizeof(bool)));
 
 					HANDLE_ERROR(cudaMemcpy(DevHash, Hash, sizeof(int) * PatternCount, cudaMemcpyHostToDevice));
 					HANDLE_ERROR(cudaMemcpy(DevText, Text, sizeof(int) * TextLen, cudaMemcpyHostToDevice));
 					HANDLE_ERROR(cudaMemcpy(DevE, E, sizeof(int) * PatternCount * PatternLen, cudaMemcpyHostToDevice));
 					HANDLE_ERROR(cudaMemset(DevMatchRes, 0, sizeof(int)));
-					HANDLE_ERROR(cudaMemset(DevMatchDetail, 0 ,TextLen*sizeof(bool)));
+					HANDLE_ERROR(cudaMemset(DevMatchDetail, 0 ,TextLen*PatternCount*sizeof(bool)));
 
 					//Kernel !3rd parameter is shared memory size in byte. Take care!
 					gettimeofday(&SearchStart, NULL);
 					//블럭개수 늘리기
-					Search<<<((TextLen + 1023) / 1024), 1024>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
+					Search<<<(TextLen/GpuTextLen), ThreadCount, 1000>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
 					cudaDeviceSynchronize();
 
 					gettimeofday(&SearchEnd, NULL);
 					
 					MatchRes = new int[2];
-					HANDLE_ERROR(cudaMemcpy(MatchResDetail, DevMatchDetail, sizeof(bool) * TextLen, cudaMemcpyDeviceToHost));
+					gettimeofday(&CopyToHostStart,NULL);
+					HANDLE_ERROR(cudaMemcpy(MatchResDetail, DevMatchDetail, sizeof(bool) * TextLen * PatternCount, cudaMemcpyDeviceToHost));
 					HANDLE_ERROR(cudaMemcpy(MatchRes, DevMatchRes, sizeof(int), cudaMemcpyDeviceToHost));
-
+					gettimeofday(&CopyToHostEnd,NULL);
+					
 					//PrintTestInfo(PatternCount, PatternLen,TextLen, MatchRes[0]);
 					OutputData(PatternCount, PatternLen, TextLen, BlockSize,FolderNumber, MatchRes[0], MatchResDetail);
 					//Freeing Variable
@@ -433,9 +432,13 @@ int main(){
 					sec = SearchEnd.tv_sec - SearchStart.tv_sec;
 					usec = SearchEnd.tv_usec - SearchStart.tv_usec;
 					TotalSearch += (sec*1000+usec/1000.0);
+
+					sec = CopyToHostEnd.tv_sec - CopyToHostStart.tv_sec;
+					usec = CopyToHostEnd.tv_usec - CopyToHostStart.tv_usec;
+					TotalCopy += (sec*1000+usec/1000.0); 
 				}	
 				//Folder End
-				OutputTime(TotalPre, TotalSearch, Total,PatternCount,PatternLen, TextLen,BlockSize);
+				OutputTime(TotalPre, TotalSearch, Total,TotalCopy,PatternCount,PatternLen, TextLen,BlockSize);
 			}
 		}
 	}

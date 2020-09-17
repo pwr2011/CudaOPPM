@@ -17,7 +17,7 @@
 #include<cstring>
 
 //Merge Sort에서 사용하는 값. 패턴의 길이를 넘어가지 않음
-#define Repeat 100
+#define Repeat 10
 #define MAX_COUNT 1'000
 #define ThreadCount 1'024
 #define CopySize 1'000'005
@@ -110,7 +110,7 @@ int FindLen(int* p, int PatternLen) {
 
 void merge(int first, int mid, int last, P* arr) {
 
-	int idx = first;
+	int Idx = first;
 	P TempArr[MAX_COUNT];
 
 
@@ -118,27 +118,27 @@ void merge(int first, int mid, int last, P* arr) {
 
 	while (i <= mid && j <= last) {
 		if (arr[i] <= arr[j]) {
-			TempArr[idx] = arr[i];
-			idx++;
+			TempArr[Idx] = arr[i];
+			Idx++;
 			i++;
 		}
 		else if (arr[i] > arr[j]) {
-			TempArr[idx] = arr[j];
-			idx++;
+			TempArr[Idx] = arr[j];
+			Idx++;
 			j++;
 		}
 	}
 
 	if (i > mid) {
 		for (int m = j; m <= last; m++) {
-			TempArr[idx] = arr[m];
-			idx++;
+			TempArr[Idx] = arr[m];
+			Idx++;
 		}
 	}
 	else {
 		for (int m = i; m <= mid; m++) {
-			TempArr[idx] = arr[m];
-			idx++;
+			TempArr[Idx] = arr[m];
+			Idx++;
 		}
 	}
 
@@ -181,7 +181,7 @@ int CalQgram(int* Pattern, int StartIdx, int PatternLen, int BlockSize) {
 	return result;
 }
 
-__device__ int DevCalQgram(int Text[], int StartIdx, int PatternLen, int BlockSize){
+__device__ int DevCalQgram(int * Text, int StartIdx, int PatternLen, int BlockSize){
 	int result = 0;
 	int count;
 
@@ -201,19 +201,19 @@ __device__ int DevCalQgram(int Text[], int StartIdx, int PatternLen, int BlockSi
 //Loc table은 가로 * 세로 => 패턴길이 * 패턴개수인 논리적으로는 2차원이지만 실제로는 1차원인 배열임
 void MakeLoc(P* TempPattern, int* Loc, int Len, int PatternCount,int PatternLen, int CurPatternIdx) {
 	for (int i = 0; i < Len; i++) {
-		int idx = CurPatternIdx + i * PatternCount;
-		Loc[idx] = TempPattern[i].second;
+		int Idx = CurPatternIdx + i * PatternCount;
+		Loc[Idx] = TempPattern[i].second;
 	}
 }
 
 void MakeE(int* Pattern, int* Loc, int* E, int Len,int PatternCount, int CurPatternIdx) {
 	for (int i = 0; i < Len - 1; i++) {
-		int idx = CurPatternIdx + i * PatternCount;
+		int Idx = CurPatternIdx + i * PatternCount;
 
-		if (Pattern[Loc[idx]] == Pattern[Loc[idx + PatternCount]])
-			E[idx] = 1;
+		if (Pattern[Loc[Idx]] == Pattern[Loc[Idx + PatternCount]])
+			E[Idx] = 1;
 		else
-			E[idx] = 0;
+			E[Idx] = 0;
 	}
 }
 
@@ -245,23 +245,21 @@ void FillHash(int **Pattern, int BlockSize, int PatternCount, int PatternLen, in
 		Hash[i] = CalQgram(Pattern[i], range - 1, PatternLen, BlockSize);
 	}
 }
-
-//__device__ InitSharedMemory()
-__device__ bool CheckOP(int Text[], int* E, int StartIdx, int PatternLen, int PatternIdx, int PatternCount) {
+__device__ bool CheckOP(int * Text, int* E, int StartIdx, int PatternLen, int PatternIdx, int PatternCount) {
 	
 	bool ret = true;
 	for (int i = 0; i < PatternLen-1; i++) {
-		int idx = PatternCount * i + PatternIdx;
+		int Idx = PatternCount * i + PatternIdx;
 		
-		if (E[idx] == 0) {
-			if (Text[StartIdx + DevLoc[idx]] >= Text[StartIdx + DevLoc[idx + PatternCount]]) {
+		if (E[Idx] == 0) {
+			if (Text[StartIdx + DevLoc[Idx]] >= Text[StartIdx + DevLoc[Idx + PatternCount]]) {
 				ret = false;
 				break;
 			}
 		}
 
 		else {
-			if (Text[StartIdx + DevLoc[idx]] != Text[StartIdx + DevLoc[idx + PatternCount]]) {
+			if (Text[StartIdx + DevLoc[Idx]] != Text[StartIdx + DevLoc[Idx + PatternCount]]) {
 				ret = false;
 				break;
 			}
@@ -273,31 +271,37 @@ __device__ bool CheckOP(int Text[], int* E, int StartIdx, int PatternLen, int Pa
 
 __global__ void Search(int * DevText, int * DevHash,int * DevE,int * DevMatchRes,
 	 int TextLen, int PatternCount, int PatternLen,int BlockSize,bool * DevMatchDetail){
+	int m = PatternLen;
+	int q = BlockSize;
 
-	extern __shared__ int sharedText[]; //dynamic allocation
-	int bidx = blockIdx.x;
-	int tidx = threadIdx.x;
-	int TextRange = GpuTextLen + PatternLen;
-	int TextStart = bidx * GpuTextLen;
+	int Idx = blockIdx.x * blockDim.x + threadIdx.x;
+	int TotalThreadCount = blockDim.x * gridDim.x;
+	int TextLenPerThread = (TextLen + TotalThreadCount-1) / TotalThreadCount;
+	int StartIdx = Idx * TextLenPerThread;
+	int EndIdx = (Idx + 1) * TextLenPerThread;
+	int s = StartIdx-(m-q);
 
-	//마지막 block일때 길이.
-	int CurTextLen = (TextLen/GpuTextLen) -1 == bidx ? GpuTextLen-PatternLen : GpuTextLen;
-
-	if(tidx<TextRange && (TextStart + tidx < TextLen)){
-		sharedText[tidx] = DevText[TextStart+tidx];
-	}
-	__syncthreads();
-	if(tidx<PatternCount){
-		for(int i=0; i < CurTextLen; i++){
-			int temp = DevCalQgram(sharedText, i+PatternLen-BlockSize, PatternLen, BlockSize);
-			
-			if(temp == DevHash[tidx]){
-				if(CheckOP(sharedText, DevE, i,PatternLen, tidx, PatternCount)){
-				atomicAdd(&DevMatchRes[0], 1);
-				DevMatchDetail[TextStart+i] = true;
+	while (StartIdx < EndIdx) {
+		if (StartIdx < m - q) {
+			StartIdx++;
+			continue;
+		}
+		if (StartIdx >= TextLen - q) {
+			break;
+		}
+		int temp = DevCalQgram(DevText, StartIdx, m, q);
+		for (int i = 0; i < PatternCount; i++) {
+			if (temp == DevHash[i]) {
+				if (CheckOP(DevText, DevE,s ,PatternLen, i,PatternCount)) {
+					//match[TEXT_SIZE*i + StartIdx + q]=1;
+					atomicAdd(&DevMatchRes[0], 1);
+					/*atomicExch(&(match[match_count[0] - 2]), i);
+					atomicExch(&(match[match_count[0] - 1]), StartIdx + q);*/
 				}
 			}
 		}
+		StartIdx++;
+		s++;
 	}
 	__syncthreads();
 }
@@ -403,7 +407,7 @@ int main(){
 					//Kernel !3rd parameter is shared memory size in byte. Take care!
 					gettimeofday(&SearchStart, NULL);
 					//블럭개수 늘리기
-					Search<<<(TextLen/GpuTextLen), ThreadCount, 1000>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
+					Search<<<((TextLen + 1023) / 1024), 1024>>>(DevText, DevHash, DevE, DevMatchRes, TextLen, PatternCount, PatternLen,BlockSize,DevMatchDetail);
 					cudaDeviceSynchronize();
 
 					gettimeofday(&SearchEnd, NULL);

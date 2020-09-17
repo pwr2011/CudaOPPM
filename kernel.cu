@@ -15,7 +15,7 @@ using namespace std;
 int a = 0;
 #define MAX_COUNT 2000
 #define MAX_LEN 20
-#define Repeat 5
+#define Repeat 10
 //#define BLOCK_SIZE 3
 //#define TEXT_SIZE 1048575
 
@@ -23,11 +23,13 @@ int a = 0;
 #define max(a,b) a<b?b:a
 
 string InputFolder = "./TESTCASE/TC-";
-string OutputFolder = "./JournalV2OUTPUT/TC-";
-string TimeFolder = "./JournalV2TIME/";
+string OutputFolder = "./JournalV4OUTPUT/TC-";
+string TimeFolder = "./JournalV4TIME/";
 string TextInput = "TextSample";
 string PatternInput = "IntStr";
 string TimeInput = "TimeRecord_";
+
+__constant__ int dev_phi_inv[16'000]; //MAX
 
 void OutputData(int PatternCount, int PatternLen, int TextLen, int BlockSize, int FolderNumber, int MatchRes) {
 	string FileName = OutputFolder + to_string(FolderNumber) + "/" + PatternInput + "_" +
@@ -389,19 +391,19 @@ int finger_printing(int* p, int s, int m, int q) {
 
 	return ret;
 }
-__device__ bool Check_OP(int* T, int arr_idx, int* P, int s, int len, int* phi_inv, int* E) {
+__device__ bool Check_OP(int* T, int arr_idx, int* P, int s, int len, int* E) {
 
 	bool ret = true;
 	for (int i = arr_idx; i < arr_idx + len - 1; i++) {
 
 		if (E[i] == 0) {
-			if (T[s + phi_inv[i]] >= T[s + phi_inv[i + 1]]) {
+			if (T[s + dev_phi_inv[i]] >= T[s + dev_phi_inv[i + 1]]) {
 				ret = false;
 				break;
 			}
 		}
 		else {
-			if (T[s + phi_inv[i]] != T[s + phi_inv[i + 1]]) {
+			if (T[s + dev_phi_inv[i]] != T[s + dev_phi_inv[i + 1]]) {
 				ret = false;
 				break;
 			}
@@ -409,7 +411,7 @@ __device__ bool Check_OP(int* T, int arr_idx, int* P, int s, int len, int* phi_i
 	}
 	return ret;
 }
-__global__ void Search (int* match_count, int* match, int* Text, int* p, int* Hash_Arr, int* phi_inv, int* E, int PATTERN_COUNT, int PATTERN_LEN, int BLOCK_SIZE, int TEXT_SIZE) {
+__global__ void Search (int* match_count, int* match, int* Text, int* p, int* Hash_Arr, int* E, int PATTERN_COUNT, int PATTERN_LEN, int BLOCK_SIZE, int TEXT_SIZE) {
 	int m = PATTERN_LEN;
 	int q = BLOCK_SIZE;
 
@@ -434,7 +436,7 @@ __global__ void Search (int* match_count, int* match, int* Text, int* p, int* Ha
 		for (int i = 0; i < PATTERN_COUNT; i++) {
 			if (temp == Hash_Arr[i]) {
 				int P_len = find_len(p,i*m, PATTERN_LEN);
-				if (Check_OP(Text,i*m, p, s, P_len, phi_inv, E)) {
+				if (Check_OP(Text,i*m, p, s, P_len, E)) {
 					//match[TEXT_SIZE*i + start_idx + q]=1;
 					atomicAdd(&match_count[0], 1);
 					/*atomicExch(&(match[match_count[0] - 2]), i);
@@ -554,7 +556,7 @@ for (int TEXT_SIZE = 100'000; TEXT_SIZE <= 1'000'000; TEXT_SIZE += 100'000) {
 						int* dev_text;
 						int* dev_p;
 						int* dev_hash_Arr;
-						int* dev_phi_inv;
+						//int* dev_phi_inv;
 						int* dev_E;
 						int* dev_match;
 						int* dev_match_count;
@@ -565,7 +567,7 @@ for (int TEXT_SIZE = 100'000; TEXT_SIZE <= 1'000'000; TEXT_SIZE += 100'000) {
 						HANDLE_ERROR(cudaMalloc((void**)&dev_text, TEXT_SIZE * sizeof(int)));
 						//HANDLE_ERROR(cudaMalloc((void**)&dev_p_length, PATTERN_COUNT * sizeof(int)));
 						HANDLE_ERROR(cudaMalloc((void**)&dev_hash_Arr, PATTERN_COUNT * sizeof(int)));
-						HANDLE_ERROR(cudaMalloc((void**)&dev_phi_inv, res * sizeof(int)));//make 1d arr!
+						//HANDLE_ERROR(cudaMalloc((void**)&dev_phi_inv, PATTERN_LEN * PATTERN_COUNT * sizeof(int)));//make 1d arr!
 						HANDLE_ERROR(cudaMalloc((void**)&dev_E, res * sizeof(int)));
 						HANDLE_ERROR(cudaMalloc((void**)&dev_match, 5 * 100'000 * sizeof(int)));
 						HANDLE_ERROR(cudaMalloc((void**)&dev_match_count, 1 * sizeof(int)));
@@ -583,11 +585,11 @@ for (int TEXT_SIZE = 100'000; TEXT_SIZE <= 1'000'000; TEXT_SIZE += 100'000) {
 						preprocessing_table(PATTERN_SET, BLOCK_SIZE, PATTERN_COUNT, PATTERN_LEN, hash_Arr, inverse_hash_Arr);
 						gettimeofday(&PreEnd, NULL);
 
-						phi_inv_1d = new int[res];
+						phi_inv_1d = new int[PATTERN_LEN * PATTERN_COUNT];
 						E_1d = new int[res];
 						temp = 0;
 						for (int i = 0; i < PATTERN_COUNT; i++) {
-							for (int j = 0; j < pattern_length[i]; j++) {
+							for (int j = 0; j < PATTERN_LEN; j++) {
 								phi_inv_1d[temp++] = phi_inv[i][j];
 							}
 						}
@@ -598,15 +600,16 @@ for (int TEXT_SIZE = 100'000; TEXT_SIZE <= 1'000'000; TEXT_SIZE += 100'000) {
 								E_1d[temp++] = E[i][j];
 							}
 						}
-						HANDLE_ERROR(cudaMemcpy(dev_phi_inv, phi_inv_1d, res * sizeof(int), cudaMemcpyHostToDevice));
+						//HANDLE_ERROR(cudaMemcpy(dev_phi_inv, phi_inv_1d, res * sizeof(int), cudaMemcpyHostToDevice));
 						HANDLE_ERROR(cudaMemcpy(dev_E, E_1d, res * sizeof(int), cudaMemcpyHostToDevice));
 						HANDLE_ERROR(cudaMemcpy(dev_hash_Arr, hash_Arr, PATTERN_COUNT * sizeof(int), cudaMemcpyHostToDevice));
 
 
+						HANDLE_ERROR(cudaMemcpyToSymbol(dev_phi_inv, phi_inv_1d, PATTERN_COUNT * PATTERN_LEN * sizeof(int)));
 
 						// ������ ���̺��� Search ����
 						gettimeofday(&SearchStart, NULL);
-						Search << < ((TEXT_SIZE + 1023) / 1024), 1024 >> > (dev_match_count, dev_match, dev_text, dev_p, dev_hash_Arr, dev_phi_inv, dev_E, PATTERN_COUNT, PATTERN_LEN, BLOCK_SIZE, TEXT_SIZE);
+						Search << < ((TEXT_SIZE + 1023) / 1024), 1024 >> > (dev_match_count, dev_match, dev_text, dev_p, dev_hash_Arr, dev_E, PATTERN_COUNT, PATTERN_LEN, BLOCK_SIZE, TEXT_SIZE);
 						cudaDeviceSynchronize();
 
 						gettimeofday(&SearchEnd, NULL);
