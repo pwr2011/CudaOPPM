@@ -313,7 +313,7 @@ void Search_H(int *match_count, bool *match, int *Text, int **p, int *Hash_Arr, 
 	// start_idx
 	// Fingerprint table
 
-	while (start_idx < TEXT_SIZE - q)
+	while (start_idx <= TEXT_SIZE - q)
 	{
 		int temp = q_gram_H(Text, start_idx, m, q);
 		for (int i = 0; i < PATTERN_COUNT; i++)
