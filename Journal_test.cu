@@ -15,6 +15,7 @@
 #include<stdio.h>
 #include<fstream>
 #include<cstring>
+#include<utility>
 
 //Merge Sort에서 사용하는 값. 패턴의 길이를 넘어가지 않음
 #define Repeat 10
@@ -39,42 +40,6 @@ string TimeInput = "TimeRecord_";
 struct timeval PreStart, PreEnd, SearchStart, SearchEnd, TotalStart, TotalEnd;
 
 int PreCalFac[10] = { 0, 1, 2, 6, 24, 120, 720, 5040, 40320, 362880}; //0!~9!
-
-void InputData(int ** Pattern, int * Text, int PatternCount, int PatternLen, int TextLen, int FolderNumber){
-	//Pattern input
-	string pattern_filename = InputFolder + to_string(FolderNumber)+"/"+PatternInput + "_" + to_string(PatternCount) + "_" +to_string(PatternLen) + ".txt";
-	ifstream pattern(pattern_filename);
-	
-	for (int i = 0; i < PatternCount; i++) {
-    	for (int j = 0; j < PatternLen; j++) {
-        	pattern >> Pattern[i][j];
-		}
-	}
-	pattern.close();
-
-	//Text input
-	string text_filename = InputFolder + to_string(FolderNumber)+"/"+ TextInput + "_" + to_string(TextLen) + ".txt";
-	ifstream text(text_filename);
-
-	for (int i = 0; i < TextLen; i++) {
-		text >> Text[i];
-	}
-	text.close();
-	return ;
-}
-
-void OutputData(int PatternCount, int PatternLen, int TextLen,int BlockSize, int FolderNumber,int MatchRes, bool * MatchResDetail){
-	string FileName = OutputFolder+ to_string(FolderNumber)+"/"+PatternInput + "_" +
-	 to_string(PatternCount) + "_" +to_string(PatternLen) +"_"+to_string(TextLen) +"_"+to_string(BlockSize) + ".txt";
-	 
-	ofstream FileStream(FileName);
-	FileStream<<MatchRes;
-	/*FileStream<<"\n";
-	for(int t=0;t<TextLen; t++){
-		FileStream<<MatchResDetail[t]<<" ";
-	}*/
-	FileStream.close();
-}
 
 void OutputTime(double Pre, float Search, double Total, int PatternCount,int PatternLen, int TextLen,int BlockSize){
 	string FileName = TimeFolder + PatternInput + "_" +
@@ -334,12 +299,12 @@ void PrintTestInfo(int PatternCount,int PatternLen,int TextLen, int MatchRes){
 	printf("Pattern count: %d Pattern_length : %d TEXT SIZE : %d\nOP size : %d\n\n", PatternCount, PatternLen,TextLen, MatchRes);
 }
 
-int main(){
-	int ** Pattern;
+pair<int,double> Do_Test_JH (int * T, int ** P, int TextLen, int PatternLen, int PatternCount){
+	int ** Pattern = P;
 	int * Loc;
 	int * E;
 	int * Hash;
-	int * Text;
+	int * Text = T;
 	int * MatchRes;
 	bool * MatchResDetail;
 
@@ -350,29 +315,17 @@ int main(){
 	int * DevE;
 	int * DevLoc;
 	bool * DevMatchDetail;
+	double sec, usec;
+	double TotalPre = 0;
+	double TotalSearch = 0;
+	double Total = 0;
 
-				double sec, usec;
-				double TotalPre = 0;
-				double TotalSearch = 0;
-				double Total = 0;
-				for(int FolderNumber = 0;FolderNumber < Repeat;FolderNumber++){
-					Text = new int[TextLen];
+	Loc = new int[PatternLen * PatternCount];
+	E = new int[PatternLen * PatternCount];
+	Hash = new int[PatternCount];
+	MatchResDetail = new bool[TextLen];
 
-					//!Warning! Only this two table is row * col => PatternLen * PatternCount
-					Loc = new int[PatternLen * PatternCount];
-					E = new int[PatternLen * PatternCount];
-					Hash = new int[PatternCount];
-
-					Pattern = new int*[PatternCount];
-					for (int i = 0; i < PatternCount; i++) {
-						Pattern[i] = new int[PatternLen];
-					}
-					MatchResDetail = new bool[TextLen];
-
-					//Read Text and Pattern
-					InputData(Pattern, Text, PatternCount, PatternLen, TextLen,FolderNumber);
-
-					gettimeofday(&TotalStart, NULL);
+	gettimeofday(&TotalStart, NULL);
 
 					//Fill the Location table
 					gettimeofday(&PreStart, NULL);
@@ -413,8 +366,6 @@ int main(){
 					HANDLE_ERROR(cudaMemcpy(MatchResDetail, DevMatchDetail, sizeof(bool) * TextLen, cudaMemcpyDeviceToHost));
 					HANDLE_ERROR(cudaMemcpy(MatchRes, DevMatchRes, sizeof(int), cudaMemcpyDeviceToHost));
 
-					//PrintTestInfo(PatternCount, PatternLen,TextLen, MatchRes[0]);
-					OutputData(PatternCount, PatternLen, TextLen, BlockSize,FolderNumber, MatchRes[0], MatchResDetail);
 					//Freeing Variable
 					FreeVariable(DevMatchRes, DevHash, DevText,DevE, Text, Pattern, Loc, Hash, E, PatternCount, MatchRes, MatchResDetail, DevMatchDetail);
 					gettimeofday(&TotalEnd, NULL);
@@ -430,10 +381,7 @@ int main(){
 					sec = SearchEnd.tv_sec - SearchStart.tv_sec;
 					usec = SearchEnd.tv_usec - SearchStart.tv_usec;
 					TotalSearch += (sec*1000+usec/1000.0);
-				}	
-				//Folder End
-				OutputTime(TotalPre, TotalSearch, Total,PatternCount,PatternLen, TextLen,BlockSize);
-			
-}
-	return 0;
+
+
+					return make_pair(MatchRes[0], Total);
 }
