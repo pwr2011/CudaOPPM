@@ -56,7 +56,7 @@ int main()
 			{
 				int test_num = t * TEST_NUM;
 				//sprintf(text1_c, "./TC-%d/IntStr_%d_%d.txt",number, test_num, strLen);
-				sprintf(text1_c, "./TC-%d/TextSample_%d.txt", number, strLen);
+				sprintf(text1_c, ".//TextSample_%d.txt", number, strLen);
 				//sprintf(text1_c, "../inputDC_1000.txt", strLen);
 				ofstream fout(text1_c, ios_base::out);
 

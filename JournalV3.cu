@@ -352,8 +352,8 @@ int main(){
 	bool * DevMatchDetail;
 
 	for (int BlockSize = 7; BlockSize <= 7; BlockSize++) {
-		for (int PatternCount = 100; PatternCount <= 1'000; PatternCount += 100) { // 100~1000
-			for (int PatternLen = 7; PatternLen <= 15; PatternLen += 1) { //3~15
+		for (int PatternCount = 1000; PatternCount <= 1'000; PatternCount += 100) { // 100~1000
+			for (int PatternLen = 8; PatternLen <= 8; PatternLen += 1) { //3~15
 				printf("Pattern Count: %d\nPattern Len : %d\n",PatternCount, PatternLen);
 
 				for (int TextLen = 100'000; TextLen <= 1'000'000; TextLen += 100'000) { //100'000 ~ 1'000'000

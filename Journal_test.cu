@@ -1,9 +1,3 @@
-//!매치 정보는 순위동형이 발생하는 텍스트에서의 위치만 전달한다!
-
-//더 효율적으로 짤수 있지만 병렬화 전의 논문과의 비교를 위해 다른 인자는 통일해야 한다고 생각, 효율화 하지 않음
-//검색단계만 병렬적으로 효율화를 함
-//하지만 기존의 preprocessing_phi()는 너무 비효율적으로 작동하여 수정함, 대응되는게 MakeTempLoc()
-
 #define _CRT_SECURE_NO_WARNINGS
 
 #include "device_launch_parameters.h"
@@ -18,46 +12,17 @@
 #include<utility>
 
 //Merge Sort에서 사용하는 값. 패턴의 길이를 넘어가지 않음
-#define Repeat 10
 #define MAX_COUNT 1'000
 #define ThreadCount 1'024
-#define CopySize 1'000'005
-#define GpuTextLen 100
 using namespace std;
 
 typedef pair<int, int> P;
 
 __constant__ int DevPreCalFac[10];
 
-//Input Folder Name
-string InputFolder = "./TESTCASE/TC-";
-string OutputFolder = "./JournalV3OUTPUT/TC-";
-string TimeFolder = "./JournalV3TIME/";
-string TextInput = "TextSample";
-string PatternInput = "IntStr";
-string TimeInput = "TimeRecord_";
-
 struct timeval PreStart, PreEnd, SearchStart, SearchEnd, TotalStart, TotalEnd;
 
 int PreCalFac[10] = { 0, 1, 2, 6, 24, 120, 720, 5040, 40320, 362880 }; //0!~9!
-
-void OutputTime(double Pre, float Search, double Total, int PatternCount, int PatternLen, int TextLen, int BlockSize) {
-	string FileName = TimeFolder + PatternInput + "_" +
-		to_string(PatternCount) + "_" + to_string(PatternLen) + "_" +
-		to_string(TextLen) + "_" + to_string(BlockSize) + ".txt";
-
-	ofstream FileStream(FileName);
-	FileStream << (double)(Pre) / Repeat << " " << (double)(Search) / Repeat << " "
-		<< (double)(Total) / Repeat;
-
-	FileStream.close();
-}
-
-ofstream GetFileStream(int PatternCount, int PatternLen) {
-	string FileName = OutputFolder + "FP_" + to_string(PatternCount) + "_" + to_string(PatternLen) + ".txt";
-	ofstream FileStream(FileName);
-	return FileStream;
-}
 
 int FindLen(int* p, int PatternLen) {
 
@@ -277,12 +242,8 @@ extern "C" void InitLocGpu(int* Loc, int PatternCount, int PatternLen)
 }
 
 void FreeVariable(int* DevMatchRes, int* DevHash, int* DevText, int* DevE,
-	int* Text, int** Pattern, int* Loc, int* Hash, int* E, int PatternCount, int* MatchRes, bool* MatchResDetail, bool* DevMatchDetail) {
+	 int* Loc, int* Hash, int* E, int PatternCount, int* MatchRes, bool* MatchResDetail, bool* DevMatchDetail) {
 
-	for (int i = 0; i < PatternCount; i++) {
-		delete[] Pattern[i];
-	}
-	delete[] Text;
 	delete[] Loc;
 	delete[] Hash;
 	delete[] E;
@@ -293,10 +254,6 @@ void FreeVariable(int* DevMatchRes, int* DevHash, int* DevText, int* DevE,
 	cudaFree(DevHash);
 	cudaFree(DevText);
 	cudaFree(DevMatchDetail);
-}
-
-void PrintTestInfo(int PatternCount, int PatternLen, int TextLen, int MatchRes) {
-	printf("Pattern count: %d Pattern_length : %d TEXT SIZE : %d\nOP size : %d\n\n", PatternCount, PatternLen, TextLen, MatchRes);
 }
 
 pair<int, double> Do_Test_JH(int* T, int** P, int TextLen, int PatternLen, int PatternCount) {
@@ -319,6 +276,7 @@ pair<int, double> Do_Test_JH(int* T, int** P, int TextLen, int PatternLen, int P
 	double TotalPre = 0;
 	double TotalSearch = 0;
 	double Total = 0;
+	int BlockSize = PatternLen <= 8 ? PatternLen : 9;
 
 	Loc = new int[PatternLen * PatternCount];
 	E = new int[PatternLen * PatternCount];
@@ -366,8 +324,9 @@ pair<int, double> Do_Test_JH(int* T, int** P, int TextLen, int PatternLen, int P
 	HANDLE_ERROR(cudaMemcpy(MatchResDetail, DevMatchDetail, sizeof(bool) * TextLen, cudaMemcpyDeviceToHost));
 	HANDLE_ERROR(cudaMemcpy(MatchRes, DevMatchRes, sizeof(int), cudaMemcpyDeviceToHost));
 
+	int RetMatchRes = MatchRes[0];
 	//Freeing Variable
-	FreeVariable(DevMatchRes, DevHash, DevText, DevE, Text, Pattern, Loc, Hash, E, PatternCount, MatchRes, MatchResDetail, DevMatchDetail);
+	FreeVariable(DevMatchRes, DevHash, DevText, DevE, Loc, Hash, E, PatternCount, MatchRes, MatchResDetail, DevMatchDetail);
 	gettimeofday(&TotalEnd, NULL);
 
 	sec = TotalEnd.tv_sec - TotalStart.tv_sec;
@@ -382,6 +341,5 @@ pair<int, double> Do_Test_JH(int* T, int** P, int TextLen, int PatternLen, int P
 	usec = SearchEnd.tv_usec - SearchStart.tv_usec;
 	TotalSearch += (sec * 1000 + usec / 1000.0);
 
-
-	return make_pair(MatchRes[0], Total);
+	return make_pair(RetMatchRes, Total);
 }
