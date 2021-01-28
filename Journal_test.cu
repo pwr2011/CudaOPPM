@@ -321,7 +321,8 @@ pair<int, double> Do_Test_JH(int* T, int** P, int TextLen, int PatternLen, int P
 	gettimeofday(&SearchEnd, NULL);
 
 	MatchRes = new int[2];
-	HANDLE_ERROR(cudaMemcpy(MatchResDetail, DevMatchDetail, sizeof(bool) * TextLen, cudaMemcpyDeviceToHost));
+	//Don't need total result, we only need the number of match count
+	//HANDLE_ERROR(cudaMemcpy(MatchResDetail, DevMatchDetail, sizeof(bool) * TextLen, cudaMemcpyDeviceToHost));
 	HANDLE_ERROR(cudaMemcpy(MatchRes, DevMatchRes, sizeof(int), cudaMemcpyDeviceToHost));
 
 	int RetMatchRes = MatchRes[0];
