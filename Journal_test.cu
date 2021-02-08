@@ -24,19 +24,6 @@ struct timeval PreStart, PreEnd, SearchStart, SearchEnd, TotalStart, TotalEnd;
 
 int PreCalFac[10] = { 0, 1, 2, 6, 24, 120, 720, 5040, 40320, 362880 }; //0!~9!
 
-int FindLen(int* p, int PatternLen) {
-
-	int ret = PatternLen;
-	for (int i = 0; i < PatternLen; i++) {
-		if (p[i] < 0 || p[i] == 0) {
-			ret = i;
-			break;
-		}
-	}
-
-	return ret;
-}
-
 void merge(int first, int mid, int last, P* arr) {
 
 	int Idx = first;
@@ -151,7 +138,7 @@ void FillLoc(int** Pattern, int* Loc, int* E, int PatternCount, int PatternLen) 
 	P* TempPattern;
 
 	for (int i = 0; i < PatternCount; i++) {
-		Len = FindLen(Pattern[i], PatternLen);
+		Len = PatternLen;
 		TempPattern = new P[Len];
 
 		for (int j = 0; j < Len; j++) {
