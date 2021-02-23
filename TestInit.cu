@@ -34,9 +34,9 @@ void InputData(int ** Pattern, int * Text, int PatternCount, int PatternLen, int
 }
 
 int main(){
-    int PatternCount =1000;
-    int PatternLen = 8;
-    int TextLen = 1000000;
+    int PatternCount =100;
+    int PatternLen = 9;
+    int TextLen = 10000;
     int ** Pattern;
     Pattern = new int*[PatternCount];
 	for (int i = 0; i < PatternCount; i++) {
@@ -44,7 +44,8 @@ int main(){
 	}
     int * Text = new int[TextLen];
     
-    InputData(Pattern, Text, PatternCount,PatternLen,TextLen);
+	InputData(Pattern, Text, PatternCount,PatternLen,TextLen);
+	printf("input complete\n");
     pair<int,double> res = Do_Test_JH(Text, Pattern, TextLen, PatternLen, PatternCount);
     printf("match : %d time : %f\n",res.first, res.second);
     //(int* T, int** P, int TextLen, int PatternLen, int PatternCount)

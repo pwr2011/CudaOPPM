@@ -12,7 +12,7 @@
 #include<utility>
 
 //Merge Sort에서 사용하는 값. 패턴의 길이를 넘어가지 않음
-#define MAX_COUNT 1'000
+#define MAX_COUNT 50
 #define ThreadCount 1'024
 using namespace std;
 
@@ -209,10 +209,8 @@ __global__ void Search(int* DevLoc, int* DevText, int* DevHash, int* DevE, int* 
 		for (int i = 0; i < PatternCount; i++) {
 			if (temp == DevHash[i]) {
 				if (CheckOP(DevLoc, DevText, DevE, s, PatternLen, i, PatternCount)) {
-					//match[TEXT_SIZE*i + StartIdx + q]=1;
-					atomicAdd(&DevMatchRes[0], 1);
-					/*atomicExch(&(match[match_count[0] - 2]), i);
-					atomicExch(&(match[match_count[0] - 1]), StartIdx + q);*/
+					DevMatchDetail[TextLen * i + StartIdx] = true;
+					//atomicAdd(&DevMatchRes[0], 1);
 				}
 			}
 		}
@@ -268,7 +266,7 @@ pair<int, double> Do_Test_JH(int* T, int** P, int TextLen, int PatternLen, int P
 	Loc = new int[PatternLen * PatternCount];
 	E = new int[PatternLen * PatternCount];
 	Hash = new int[PatternCount];
-	MatchResDetail = new bool[TextLen];
+	MatchResDetail = new bool[TextLen * PatternCount];
 
 	gettimeofday(&TotalStart, NULL);
 
@@ -289,15 +287,14 @@ pair<int, double> Do_Test_JH(int* T, int** P, int TextLen, int PatternLen, int P
 	HANDLE_ERROR(cudaMalloc((void**)&DevHash, sizeof(int) * PatternCount));
 	HANDLE_ERROR(cudaMalloc((void**)&DevText, sizeof(int) * TextLen));
 	HANDLE_ERROR(cudaMalloc((void**)&DevE, sizeof(int) * PatternCount * PatternLen));
-	HANDLE_ERROR(cudaMalloc((void**)&DevMatchDetail, TextLen * sizeof(bool)));
-
+	HANDLE_ERROR(cudaMalloc((void**)&DevMatchDetail, TextLen * PatternCount * sizeof(bool)));
 
 	HANDLE_ERROR(cudaMemcpy(DevLoc, Loc, sizeof(int) * PatternLen * PatternCount, cudaMemcpyHostToDevice));
 	HANDLE_ERROR(cudaMemcpy(DevHash, Hash, sizeof(int) * PatternCount, cudaMemcpyHostToDevice));
 	HANDLE_ERROR(cudaMemcpy(DevText, Text, sizeof(int) * TextLen, cudaMemcpyHostToDevice));
 	HANDLE_ERROR(cudaMemcpy(DevE, E, sizeof(int) * PatternCount * PatternLen, cudaMemcpyHostToDevice));
 	HANDLE_ERROR(cudaMemset(DevMatchRes, 0, sizeof(int)));
-	HANDLE_ERROR(cudaMemset(DevMatchDetail, 0, TextLen * sizeof(bool)));
+	HANDLE_ERROR(cudaMemset(DevMatchDetail, 0, TextLen * PatternCount * sizeof(bool)));
 
 	//Kernel !3rd parameter is shared memory size in byte. Take care!
 	gettimeofday(&SearchStart, NULL);
@@ -308,13 +305,10 @@ pair<int, double> Do_Test_JH(int* T, int** P, int TextLen, int PatternLen, int P
 	gettimeofday(&SearchEnd, NULL);
 
 	MatchRes = new int[2];
-	//Don't need total result, we only need the number of match count
-	//HANDLE_ERROR(cudaMemcpy(MatchResDetail, DevMatchDetail, sizeof(bool) * TextLen, cudaMemcpyDeviceToHost));
-	HANDLE_ERROR(cudaMemcpy(MatchRes, DevMatchRes, sizeof(int), cudaMemcpyDeviceToHost));
+	HANDLE_ERROR(cudaMemcpy(MatchResDetail, DevMatchDetail, sizeof(bool) * TextLen * PatternCount, cudaMemcpyDeviceToHost));
+	//HANDLE_ERROR(cudaMemcpy(MatchRes, DevMatchRes, sizeof(int), cudaMemcpyDeviceToHost));
 
-	int RetMatchRes = MatchRes[0];
-	//Freeing Variable
-	FreeVariable(DevMatchRes, DevHash, DevText, DevE, Loc, Hash, E, PatternCount, MatchRes, MatchResDetail, DevMatchDetail);
+	int RetMatchRes = 0;
 	gettimeofday(&TotalEnd, NULL);
 
 	sec = TotalEnd.tv_sec - TotalStart.tv_sec;
@@ -328,6 +322,14 @@ pair<int, double> Do_Test_JH(int* T, int** P, int TextLen, int PatternLen, int P
 	sec = SearchEnd.tv_sec - SearchStart.tv_sec;
 	usec = SearchEnd.tv_usec - SearchStart.tv_usec;
 	TotalSearch += (sec * 1000 + usec / 1000.0);
+
+	for(int i=0;i<PatternCount*TextLen;i++){
+		if(MatchResDetail[i] == true){
+			RetMatchRes++;
+		}
+	}
+	//Freeing Variable
+	FreeVariable(DevMatchRes, DevHash, DevText, DevE, Loc, Hash, E, PatternCount, MatchRes, MatchResDetail, DevMatchDetail);
 
 	return make_pair(RetMatchRes, Total);
 }
